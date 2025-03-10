@@ -10,7 +10,7 @@ import com.yiku.yikupayload_sdk.protocol.TRIPOD_HEAD
 import com.yiku.yikupayload_sdk.util.LightHost
 import com.yiku.yikupayload_sdk.util.Msg
 import com.yiku.yikupayload_sdk.util.MsgCallback
-import com.yiku.yikupayload.util.Short2ByteArray
+import com.yiku.yikupayload_sdk.util.Short2ByteArray
 import com.yiku.yikupayload_sdk.util.bytesToHex
 import java.io.InputStream
 import java.io.OutputStream

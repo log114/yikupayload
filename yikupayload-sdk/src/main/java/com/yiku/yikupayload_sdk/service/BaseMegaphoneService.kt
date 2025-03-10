@@ -39,7 +39,7 @@ import kotlin.concurrent.thread
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import com.alibaba.fastjson.JSONObject
-import com.yiku.yikupayload.util.ProgressRequestBody
+import com.yiku.yikupayload_sdk.util.ProgressRequestBody
 import okhttp3.FormBody
 import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
