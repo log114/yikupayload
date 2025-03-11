@@ -11,3 +11,4 @@ const val SlowDescentDeviceHost = "192.168.144.29"// 缓降器
 const val GripperHost = "192.168.144.30"// 机械爪
 const val ResqmeHost = "192.168.144.31"// 破窗器
 const val ExtinguisherHost = "192.168.144.32"// 灭火罐
+const val WaterGunHost = "192.168.144.33"// 水枪

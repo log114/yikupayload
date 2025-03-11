@@ -93,7 +93,7 @@ class ThrowerService {
     }
 
     open fun connect(): Boolean {
-        if (host == null || host == "") {
+        if (host == "") {
             host = ThrowerHost
         }
         if (isConnected){
