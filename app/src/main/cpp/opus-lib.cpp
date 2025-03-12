@@ -5,6 +5,7 @@
 #include <jni.h>
 #include "opus/include/opus.h"
 #include<android/log.h>
+#include <stdio.h>
 
 #define TAG    "opus-jni" // 这个是自定义的LOG的标识
 #define LOGD(...)  __android_log_print(ANDROID_LOG_INFO,TAG,__VA_ARGS__) // 定义LOGD类型
@@ -17,6 +18,7 @@ extern "C" {
 JNIEXPORT jlong JNICALL Java_com_yiku_yikupayload_1sdk_util_OpusUtils_createEncoder
         (JNIEnv *env, jobject thiz, jint sampleRateInHz, jint channelConfig, jint complexity) {
     int error;
+    printf("Hello, World!\n");
     OpusEncoder *pOpusEnc = opus_encoder_create(sampleRateInHz, channelConfig,
                                                 OPUS_APPLICATION_RESTRICTED_LOWDELAY,
                                                 &error);
