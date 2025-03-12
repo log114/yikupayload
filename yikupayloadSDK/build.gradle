@@ -45,6 +45,11 @@ android {
             path "CMakeLists.txt"
         }
     }
+    sourceSets {
+        main {
+            resources.srcDirs = ['cpp', 'jniLibs']  // 指定资源文件夹，包括 .so 文件
+        }
+    }
 }
 
 afterEvaluate {

@@ -21,5 +21,7 @@ class MainActivity : AppCompatActivity() {
         Log.i("测试", "初始化OpusUtils成功")
         val createEncoder = opusUtils.createEncoder(8000, 1, 1)
         Log.i("测试", "createEncoder成功")
+        val createDecoder = opusUtils.createDecoder(48000, 1)
+        Log.i("测试", "createDecoder成功")
     }
 }
