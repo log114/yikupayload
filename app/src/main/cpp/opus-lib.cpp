@@ -5,7 +5,7 @@
 #include <jni.h>
 #include "opus/include/opus.h"
 #include<android/log.h>
-#include <stdio.h>
+#include <cstdio>
 
 #define TAG    "opus-jni" // 这个是自定义的LOG的标识
 #define LOGD(...)  __android_log_print(ANDROID_LOG_INFO,TAG,__VA_ARGS__) // 定义LOGD类型
