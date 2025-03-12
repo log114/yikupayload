@@ -14,7 +14,8 @@
         tools:ignore="AllowBackup,GoogleAppIndexingWarning"
         tools:replace="android:label, android:theme">
         <activity
-            android:name=".MainActivity">
+            android:name=".MainActivity"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
