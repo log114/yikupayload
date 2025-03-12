@@ -29,11 +29,6 @@ android {
     lintOptions {
         abortOnError false
     }
-    externalNativeBuild {
-        cmake {
-            path "CMakeLists.txt"
-        }
-    }
 
     packagingOptions {
         doNotStrip "*/*/libdjivideo.so"
