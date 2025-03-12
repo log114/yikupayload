@@ -15,10 +15,9 @@
 extern "C" {
 #endif
 
-JNIEXPORT jlong JNICALL Java_com_yiku_yikupayload_1sdk_util_OpusUtils_createEncoder
+JNIEXPORT jlong JNICALL Java_com_yiku_yikupayloadSDK_util_OpusUtils_createEncoder
         (JNIEnv *env, jobject thiz, jint sampleRateInHz, jint channelConfig, jint complexity) {
     int error;
-    printf("Hello, World!\n");
     OpusEncoder *pOpusEnc = opus_encoder_create(sampleRateInHz, channelConfig,
                                                 OPUS_APPLICATION_RESTRICTED_LOWDELAY,
                                                 &error);
@@ -35,14 +34,14 @@ JNIEXPORT jlong JNICALL Java_com_yiku_yikupayload_1sdk_util_OpusUtils_createEnco
     }
     return (jlong) pOpusEnc;
 }
-JNIEXPORT jlong JNICALL Java_com_yiku_yikupayload_1sdk_util_OpusUtils_createDecoder
+JNIEXPORT jlong JNICALL Java_com_yiku_yikupayloadSDK_util_OpusUtils_createDecoder
         (JNIEnv *env, jobject thiz, jint sampleRateInHz, jint channelConfig) {
     int error;
     LOGD("OPUS Version: %s", opus_get_version_string());
     OpusDecoder *pOpusDec = opus_decoder_create(sampleRateInHz, channelConfig, &error);
     return (jlong) pOpusDec;
 }
-JNIEXPORT jint JNICALL Java_com_yiku_yikupayload_1sdk_util_OpusUtils_encode
+JNIEXPORT jint JNICALL Java_com_yiku_yikupayloadSDK_util_OpusUtils_encode
         (JNIEnv *env, jobject thiz, jlong pOpusEnc, jshortArray samples, jint offset,
          jbyteArray bytes) {
     auto *pEnc = (OpusEncoder *) pOpusEnc;
@@ -65,7 +64,7 @@ JNIEXPORT jint JNICALL Java_com_yiku_yikupayload_1sdk_util_OpusUtils_encode
     env->ReleaseByteArrayElements(bytes, pBytes, 0);
     return nRet;
 }
-JNIEXPORT jint JNICALL Java_com_yiku_yikupayload_1sdk_util_OpusUtils_decode
+JNIEXPORT jint JNICALL Java_com_yiku_yikupayloadSDK_util_OpusUtils_decode
         (JNIEnv *env, jobject thiz, jlong pOpusDec, jbyteArray bytes,
          jshortArray samples) {
     OpusDecoder *pDec = (OpusDecoder *) pOpusDec;
@@ -84,14 +83,14 @@ JNIEXPORT jint JNICALL Java_com_yiku_yikupayload_1sdk_util_OpusUtils_decode
     env->ReleaseByteArrayElements(bytes, pBytes, 0);
     return nRet;
 }
-JNIEXPORT void JNICALL Java_com_yiku_yikupayload_1sdk_util_OpusUtils_destroyEncoder
+JNIEXPORT void JNICALL Java_com_yiku_yikupayloadSDK_util_OpusUtils_destroyEncoder
         (JNIEnv *env, jobject thiz, jlong pOpusEnc) {
     OpusEncoder *pEnc = (OpusEncoder *) pOpusEnc;
     if (!pEnc)
         return;
     opus_encoder_destroy(pEnc);
 }
-JNIEXPORT void JNICALL Java_com_yiku_yikupayload_1sdk_util_OpusUtils_destroyDecoder
+JNIEXPORT void JNICALL Java_com_yiku_yikupayloadSDK_util_OpusUtils_destroyDecoder
         (JNIEnv *env, jobject thiz, jlong pOpusDec) {
     OpusDecoder *pDec = (OpusDecoder *) pOpusDec;
     if (!pDec)
