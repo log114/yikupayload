@@ -12,6 +12,15 @@
         android:theme="@style/Theme.Yikupayload"
         android:usesCleartextTraffic="true"
         tools:ignore="AllowBackup,GoogleAppIndexingWarning"
-        tools:replace="android:label, android:theme" />
+        tools:replace="android:label, android:theme">
+        <activity
+            android:name=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
 
 </manifest>

@@ -21,4 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "yikupayload"
 include ':app'
-include ':yikupayload-sdk'
+include ':yikupayloadSDK'
