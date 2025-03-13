@@ -59,7 +59,7 @@ afterEvaluate {
                 from components.release
                 groupId = 'com.github.log114' // 替换为你的 GitHub 用户名
                 artifactId = 'yikupayload' // 替换为你的库名称
-                version = '0.8.7' // 替换为你的版本号
+                version = '0.8.11' // 替换为你的版本号
             }
         }
     }
