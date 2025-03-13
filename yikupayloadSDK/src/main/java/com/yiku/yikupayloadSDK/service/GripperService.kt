@@ -75,12 +75,12 @@ class GripperService {
 
     open fun sendData2Payload(data: ByteArray) {
         thread {
+            Log.i(TAG, "机械爪，sendData:${bytesToHex(data)}")
             if (!getIsConnected()) {
                 return@thread
             }
             try {
                 //向输出流中写入数据，传向服务端
-                Log.i(TAG, "sendData:${bytesToHex(data)}")
                 out?.write(data)
             } catch (e: Exception) {
                 e.printStackTrace()

@@ -137,11 +137,11 @@ open class SlowDescentDeviceService {
     open fun sendData2Payload(data: ByteArray): Int {
         thread {
             try {
+                Log.i(TAG, "缓降器，sendData:${bytesToHex(data)}")
                 //向输出流中写入数据，传向服务端
                 if (!isConnected || !client.isConnected) {
                     connect()
                 }
-                Log.i(TAG, "缓降器sendData:${bytesToHex(data)}")
                 out?.write(data)
             } catch (e: java.lang.Exception) {
                 e.printStackTrace()

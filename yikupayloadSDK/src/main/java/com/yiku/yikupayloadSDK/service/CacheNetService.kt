@@ -74,11 +74,11 @@ open class BaseCacheNetService {
     open fun sendData2Payload(data: ByteArray) {
         thread {
             try {
+                Log.i(TAG, "网枪，sendData:${bytesToHex(data)}")
                 //向输出流中写入数据，传向服务端
                 if (!getIsConnected()) {
                     return@thread
                 }
-                Log.i(TAG, "sendData:${bytesToHex(data)}")
                 out?.write(data)
             } catch (e: Exception) {
                 e.printStackTrace()

@@ -113,6 +113,7 @@ class LightService {
     open fun sendData2Payload(data: ByteArray): Int {
         thread {
             try {
+                Log.i(TAG, "探照灯，sendData:${bytesToHex(data)}")
                 //向输出流中写入数据，传向服务端
                 val firstTime = Date().time
                 if (!isConnected || !client?.isConnected!!) {
@@ -122,8 +123,6 @@ class LightService {
                     )
                     reConnect()
                 }
-                Log.i(TAG, "耗时: ${Date().time - firstTime}")
-                Log.i(TAG, "sendData:${bytesToHex(data)}")
                 if (out == null) {
                     Log.i(TAG, "out is null")
                     return@thread

@@ -7,6 +7,7 @@ import java.net.Socket
 import kotlin.concurrent.thread
 import com.yiku.yikupayloadSDK.util.ShoutHost
 import com.yiku.yikupayloadSDK.util.VehiclePlatform
+import com.yiku.yikupayloadSDK.util.bytesToHex
 
 
 class MegaphoneService : BaseMegaphoneService() {
@@ -154,16 +155,14 @@ class MegaphoneService : BaseMegaphoneService() {
     override fun sendData2Payload(data: ByteArray): Int {
         thread {
             try {
+                Log.i(TAG, "喊话器，sendData:${bytesToHex(data)}")
                 //向输出流中写入数据，传向服务端
                 if (client == null || !client!!.isConnected) {
                     if (!isConnected) {
                         connect()
                     }
                 }
-                Log.i(TAG, "SEND size:${data.size} data:${data.asList()}")
-//                Log.i(TAG, "sendDataBeginTime:${Date()}")
                 out?.write(data)
-//                Log.i(TAG, "sendDataEndTime:${Date()}")
             } catch (e: java.lang.Exception) {
                 e.printStackTrace()
                 Log.e(TAG, "传输失败，重试中...")

@@ -156,6 +156,7 @@ class ThrowerService {
     open fun sendData2Payload(data: ByteArray) {
         thread {
             try {
+                Log.i(TAG, "抛投，sendData:${bytesToHex(data)}")
                 //向输出流中写入数据，传向服务端
                 if (!getIsConnected()) {
 //                    throw Exception("未连接")

@@ -10,6 +10,7 @@ import com.yiku.yikupayloadSDK.protocol.SHARP_FLASH
 import com.yiku.yikupayloadSDK.util.Msg
 import com.yiku.yikupayloadSDK.util.VehiclePlatform
 import com.yiku.yikupayloadSDK.util.YA3Host
+import com.yiku.yikupayloadSDK.util.bytesToHex
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.Socket
@@ -140,11 +141,11 @@ class FourInOneService : BaseMegaphoneService() {
     override fun sendData2Payload(data: ByteArray): Int {
         thread {
             try {
+                Log.i(TAG, "四合一，sendData:${bytesToHex(data)}")
                 //向输出流中写入数据，传向服务端
                 if (client == null || !client!!.isConnected || !isConnected) {
                     connect()
                 }
-                Log.i(TAG, "SEND size:${data.size} data:${data.asList()}")
                 out?.write(data)
             } catch (e: java.lang.Exception) {
                 e.printStackTrace()

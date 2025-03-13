@@ -40,6 +40,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import com.alibaba.fastjson.JSONObject
 import com.yiku.yikupayloadSDK.util.ProgressRequestBody
+import com.yiku.yikupayloadSDK.util.bytesToHex
 import okhttp3.FormBody
 import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -169,7 +170,7 @@ open class BaseMegaphoneService {
         val sendData = ByteArray(2)
         sendData[0] = 0x8d.toByte()
         sendData[1] = data.toByte()
-        Log.i(TAG, "sendData:${sendData.asList()}")
+        Log.i(TAG, "sendData:${bytesToHex(sendData)}")
         servoControlOut.write(sendData)
     }
 
