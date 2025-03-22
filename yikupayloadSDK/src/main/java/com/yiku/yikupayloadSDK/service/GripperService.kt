@@ -53,16 +53,21 @@ class GripperService {
             inputStream = client.getInputStream()
             thread {
                 Log.i(TAG, "recv start...")
-                while (client.isConnected) {
-                    val recv = ByteArray(1024)
-                    inputStream?.read(recv)
-                    if (recv.isEmpty()) {
-                        continue
+                try {
+                    while (client.isConnected) {
+                        val recv = ByteArray(1024)
+                        inputStream?.read(recv)
+                        if (recv.isEmpty()) {
+                            continue
+                        }
+    //                    Log.i(TAG, "recv:${String(recv)}")
+                        for (msgCallback in msgCallbacks) {
+                            msgCallback.onMsg(recv)
+                        }
                     }
-//                    Log.i(TAG, "recv:${String(recv)}")
-                    for (msgCallback in msgCallbacks) {
-                        msgCallback.onMsg(recv)
-                    }
+                } catch (e: Exception) {
+                    Log.i(TAG, "机械爪信息获取失败：$e")
+                    e.printStackTrace()
                 }
             }
             true

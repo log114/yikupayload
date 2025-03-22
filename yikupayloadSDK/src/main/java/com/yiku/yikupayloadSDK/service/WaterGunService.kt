@@ -59,16 +59,21 @@ class WaterGunService {
             inputStream = client.getInputStream()
             thread {
                 Log.i(TAG, "recv start...")
-                while (client.isConnected) {
-                    val recv = ByteArray(1024)
-                    inputStream?.read(recv)
-                    if (recv.isEmpty()) {
-                        continue
+                try {
+                    while (client.isConnected) {
+                        val recv = ByteArray(1024)
+                        inputStream?.read(recv)
+                        if (recv.isEmpty()) {
+                            continue
+                        }
+    //                    Log.i(TAG, "recv:${String(recv)}")
+                        for (msgCallback in msgCallbacks) {
+                            msgCallback.onMsg(recv)
+                        }
                     }
-//                    Log.i(TAG, "recv:${String(recv)}")
-                    for (msgCallback in msgCallbacks) {
-                        msgCallback.onMsg(recv)
-                    }
+                } catch (e: Exception) {
+                    Log.i(TAG, "水枪信息获取失败：$e")
+                    e.printStackTrace()
                 }
             }
             true
@@ -103,7 +108,7 @@ class WaterGunService {
         }
     }
 
-    // 操作灭火罐开关，0关，1开
+    // 操作水枪开关，0关，1开
     fun operate(operateType: Int) {
         val msg = Msg();
         msg.msgId = WATERGUN_OPERATE.toByte()

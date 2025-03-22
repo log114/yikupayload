@@ -131,7 +131,6 @@ class ThrowerService {
                     } catch (e: Exception) {
                         Log.i(TAG, "抛投信息获取失败：$e")
                         e.printStackTrace()
-                        false
                     }
                 }
             }

@@ -98,48 +98,53 @@ class MegaphoneService : BaseMegaphoneService() {
             inputStream = client!!.getInputStream()
             thread {
                 Log.i(TAG, "recv start...")
-                while (client!!.isConnected) {
-                    val recv = ByteArray(1024)
-                    val i = inputStream?.read(recv)
-                    if (i == 0) {
-                        continue
-                    }
-                    Log.i(TAG, "recv:${String(recv)}")
-                    val data = recv.slice(0 until i!!).toByteArray()
-                    var tmp = ByteArray(0);
+                try {
+                    while (client!!.isConnected) {
+                        val recv = ByteArray(1024)
+                        val i = inputStream?.read(recv)
+                        if (i == 0) {
+                            continue
+                        }
+                        Log.i(TAG, "recv:${String(recv)}")
+                        val data = recv.slice(0 until i!!).toByteArray()
+                        var tmp = ByteArray(0);
 
-                    var n = 0;
-                    data.forEach {
-                        if (it.toInt().toChar() == '[' && tmp.isNotEmpty()) {
+                        var n = 0;
+                        data.forEach {
+                            if (it.toInt().toChar() == '[' && tmp.isNotEmpty()) {
+                                for (msgCallback in msgCallbacks) {
+                                    msgCallback.onMsg(tmp)
+                                }
+                                tmp = ByteArray(0);
+    //                            n++
+                                n = 0;
+                            }
+                            tmp += it
+                            n++
+                        }
+                        if (tmp.isNotEmpty()) {
                             for (msgCallback in msgCallbacks) {
                                 msgCallback.onMsg(tmp)
                             }
-                            tmp = ByteArray(0);
-//                            n++
-                            n = 0;
-                        }
-                        tmp += it
-                        n++
-                    }
-                    if (tmp.isNotEmpty()) {
-                        for (msgCallback in msgCallbacks) {
-                            msgCallback.onMsg(tmp)
-                        }
 
+                        }
+    //                    data.forEach {
+    //                        run {
+    //                            if (parseByte(it)) {
+    //                                for (msgCallback in msgCallbacks) {
+    //                                    msgCallback.onMsg(recvDataLast)
+    //                                }
+    //                            }
+    //
+    //                        }
+    //                    }
+                        if (String(recv).startsWith("GAF")) {
+                            getAudioFilesCallback?.onResult(String(recv).substring(3))
+                        }
                     }
-//                    data.forEach {
-//                        run {
-//                            if (parseByte(it)) {
-//                                for (msgCallback in msgCallbacks) {
-//                                    msgCallback.onMsg(recvDataLast)
-//                                }
-//                            }
-//
-//                        }
-//                    }
-                    if (String(recv).startsWith("GAF")) {
-                        getAudioFilesCallback?.onResult(String(recv).substring(3))
-                    }
+                } catch (e: Exception) {
+                    Log.i(TAG, "喊话器信息获取失败：$e")
+                    e.printStackTrace()
                 }
             }
             true
