@@ -2,8 +2,6 @@ package com.yiku.yikupayloadSDK.service
 
 import android.util.Log
 import com.yiku.yikupayloadSDK.protocol.EMITTER_GRAB_OR_RELEASE
-import com.yiku.yikupayloadSDK.protocol.GRIPPER_RISE_OR_DECLINE
-import com.yiku.yikupayloadSDK.protocol.GRIPPER_STOP
 import com.yiku.yikupayloadSDK.util.GripperHost
 import com.yiku.yikupayloadSDK.util.Msg
 import com.yiku.yikupayloadSDK.util.MsgCallback
@@ -96,22 +94,6 @@ class GripperService {
         }
     }
 
-    // 上升
-    fun gripperRise() {
-        val msg = Msg()
-        msg.msgId = GRIPPER_RISE_OR_DECLINE.toByte()
-        msg.payload = ByteArray(1)
-        msg.payload[0] = 0x00.toByte()
-        sendData2Payload(msg.getMsg())
-    }
-    // 下降
-    fun gripperDecline() {
-        val msg = Msg()
-        msg.msgId = GRIPPER_RISE_OR_DECLINE.toByte()
-        msg.payload = ByteArray(1)
-        msg.payload[0] = 0x01.toByte()
-        sendData2Payload(msg.getMsg())
-    }
     // 抓取
     fun gripperGrab() {
         val msg = Msg()
@@ -120,14 +102,7 @@ class GripperService {
         msg.payload[0] = 0x01.toByte()
         sendData2Payload(msg.getMsg())
     }
-    // 紧急制动
-    fun gripperStop() {
-        val msg = Msg()
-        msg.msgId = GRIPPER_STOP.toByte()
-        msg.payload = ByteArray(1)
-        msg.payload[0] = 0x01.toByte()
-        sendData2Payload(msg.getMsg())
-    }
+
     // 松开
     fun gripperRelease() {
         val msg = Msg()
