@@ -99,7 +99,7 @@ class GripperService {
         val msg = Msg()
         msg.msgId = EMITTER_GRAB_OR_RELEASE.toByte()
         msg.payload = ByteArray(1)
-        msg.payload[0] = 0x01.toByte()
+        msg.payload[0] = 0x00.toByte()
         sendData2Payload(msg.getMsg())
     }
 
@@ -108,7 +108,7 @@ class GripperService {
         val msg = Msg()
         msg.msgId = EMITTER_GRAB_OR_RELEASE.toByte()
         msg.payload = ByteArray(1)
-        msg.payload[0] = 0x00.toByte()
+        msg.payload[0] = 0x01.toByte()
         sendData2Payload(msg.getMsg())
     }
 }

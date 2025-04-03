@@ -28,6 +28,7 @@ class MegaphoneService : BaseMegaphoneService() {
 
     override fun setIp(ip: String) {
         host = ip
+        setHost(host)
     }
     override fun getIp(): String {
         return host
@@ -91,6 +92,7 @@ class MegaphoneService : BaseMegaphoneService() {
     override fun connect(): Boolean {
         //开启一个链接，需要指定地址和端口
         return try {
+            Log.i(TAG, "连接喊话器")
             client = Socket(host, port)
             out = client!!.getOutputStream()
             Log.i(TAG, "喊话器连接成功")
