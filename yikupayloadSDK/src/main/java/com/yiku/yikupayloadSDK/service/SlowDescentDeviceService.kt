@@ -133,6 +133,13 @@ open class SlowDescentDeviceService {
         }
     }
 
+    // 断连
+    open fun disConnect() {
+        if(getIsConnected()) {
+            isConnected = false
+            client.close()
+        }
+    }
 
     open fun sendData2Payload(data: ByteArray): Int {
         thread {
