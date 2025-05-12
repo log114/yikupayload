@@ -119,19 +119,21 @@ class WaterBranchService {
         sendData2Payload(msg.getMsg())
     }
 
-    // 释放水带
-    fun hoseRelease() {
+    // 释放水带，0关，1开
+    fun hoseRelease(operateType: Int) {
         val msg = Msg();
         msg.msgId = WATERBRANCH_HOSE_RELEASE.toByte()
         msg.payload = ByteArray(4)
+        msg.payload[0] = operateType.toByte()
         sendData2Payload(msg.getMsg())
     }
 
-    // 水带脱困
-    fun hoseDetachment() {
+    // 水带脱困，0关，1开
+    fun hoseDetachment(operateType: Int) {
         val msg = Msg();
         msg.msgId = WATERBRANCH_HOSE_DETACHMENT.toByte()
         msg.payload = ByteArray(4)
+        msg.payload[0] = operateType.toByte()
         sendData2Payload(msg.getMsg())
     }
 
