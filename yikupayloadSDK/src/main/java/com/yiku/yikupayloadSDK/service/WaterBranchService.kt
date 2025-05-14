@@ -3,7 +3,6 @@ package com.yiku.yikupayloadSDK.service
 import android.util.Log
 import com.yiku.yikupayloadSDK.protocol.WATERBRANCH_HOSE_DETACHMENT
 import com.yiku.yikupayloadSDK.protocol.WATERBRANCH_HOSE_RELEASE
-import com.yiku.yikupayloadSDK.protocol.WATERBRANCH_OPERATE
 import com.yiku.yikupayloadSDK.protocol.WATERBRANCH_STATE_SEND
 import com.yiku.yikupayloadSDK.util.Msg
 import com.yiku.yikupayloadSDK.util.MsgCallback
@@ -108,15 +107,6 @@ class WaterBranchService {
                 client.close()
             }
         }
-    }
-
-    // 操作水枪开关，0关，1开
-    fun operate(operateType: Int) {
-        val msg = Msg();
-        msg.msgId = WATERBRANCH_OPERATE.toByte()
-        msg.payload = ByteArray(4)
-        msg.payload[0] = operateType.toByte()
-        sendData2Payload(msg.getMsg())
     }
 
     // 释放水带，0关，1开
