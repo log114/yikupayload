@@ -1,7 +1,7 @@
 package com.yiku.yikupayloadSDK.service
 
 import android.util.Log
-import com.yiku.yikupayloadSDK.protocol.WATERGUN_OPERATE
+import com.yiku.yikupayloadSDK.protocol.WATERGUN_MODESWITCH
 import com.yiku.yikupayloadSDK.protocol.WATERGUN_STATE_SEND
 import com.yiku.yikupayloadSDK.protocol.WATERGUN_TOLEFT
 import com.yiku.yikupayloadSDK.protocol.WATERGUN_TORIGHT
@@ -126,12 +126,16 @@ class WaterGunService {
         sendData2Payload(msg.getMsg())
     }
 
-    // 操作水枪开关，0关，1开
-    fun operate(operateType: Int) {
+    /* 操作水枪模式切换
+    * 状态为0时，不可用
+    * 状态为1时，发送该命令会变成自动模式，即水枪自动左右转，状态会变为2
+    * 状态为2时，发送该命令，水枪停止左右转动，状态变为3，水枪慢慢回归中点，然后自动变为手动模式，状态变为4
+    * 状态为4时，发送改命令，状态变为5，与状态1一致
+    * */
+    fun modeSwitch() {
         val msg = Msg();
-        msg.msgId = WATERGUN_OPERATE.toByte()
+        msg.msgId = WATERGUN_MODESWITCH.toByte()
         msg.payload = ByteArray(4)
-        msg.payload[0] = operateType.toByte()
         sendData2Payload(msg.getMsg())
     }
 
