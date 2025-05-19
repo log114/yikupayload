@@ -3,6 +3,8 @@ package com.yiku.yikupayloadSDK.service
 import android.util.Log
 import com.yiku.yikupayloadSDK.protocol.WATERGUN_OPERATE
 import com.yiku.yikupayloadSDK.protocol.WATERGUN_STATE_SEND
+import com.yiku.yikupayloadSDK.protocol.WATERGUN_TOLEFT
+import com.yiku.yikupayloadSDK.protocol.WATERGUN_TORIGHT
 import com.yiku.yikupayloadSDK.util.Msg
 import com.yiku.yikupayloadSDK.util.MsgCallback
 import com.yiku.yikupayloadSDK.util.WaterGunHost
@@ -106,6 +108,22 @@ class WaterGunService {
                 client.close()
             }
         }
+    }
+
+    // 水枪往左
+    fun toLeft() {
+        val msg = Msg();
+        msg.msgId = WATERGUN_TOLEFT.toByte()
+        msg.payload = ByteArray(4)
+        sendData2Payload(msg.getMsg())
+    }
+
+    // 水枪往右
+    fun toRight() {
+        val msg = Msg();
+        msg.msgId = WATERGUN_TORIGHT.toByte()
+        msg.payload = ByteArray(4)
+        sendData2Payload(msg.getMsg())
     }
 
     // 操作水枪开关，0关，1开
