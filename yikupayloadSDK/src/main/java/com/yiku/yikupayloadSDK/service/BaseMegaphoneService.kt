@@ -74,6 +74,14 @@ open class BaseMegaphoneService {
     private val client = OkHttpClient()
     private var host = ""
 
+    // 添加线程同步对象
+    private val audioLock = Any()
+
+    // 保存录音线程引用
+    private var recordingThread: Thread? = null
+
+    // 添加音频状态标志
+    private var audioInitialized = false
 
     private lateinit var servoControlOut: OutputStream
     private var servoControlClient: Socket? = null
@@ -217,72 +225,116 @@ open class BaseMegaphoneService {
     }
 
     open fun startRealTimeShout(isDisableRadio: Boolean) {
-        Log.i(TAG, "喊话1")
-        var audioSource = MediaRecorder.AudioSource.MIC //来源
-        if (platform == VehiclePlatform.H30) {
-            audioSource = MediaRecorder.AudioSource.MIC //来源
-        }
-        Log.i(TAG, "喊话2")
-        val rate = 8000 //采样频率
-        val track = AudioFormat.CHANNEL_IN_MONO //声道
-        val audioFormat = AudioFormat.ENCODING_PCM_16BIT //格式
-        var bufferSize = 960
-        if (platform == VehiclePlatform.H30) {
-            bufferSize = 640
-        }
-        Log.i(TAG, "喊话3")
-        Log.i(TAG, "startRecord...")
-        if (mAudioRecord == null) {
-            Log.i(TAG, "喊话4")
-            mAudioRecord = AudioRecord(
-                audioSource, rate,
-                track, audioFormat, bufferSize
-            )
-            Log.i(TAG, "喊话5")
-        }
-        val data = ByteArray(bufferSize)
-        mAudioRecord!!.startRecording()
-        Log.i(TAG, "喊话6")
-        isRecording = true
+        synchronized(audioLock) {
+            // 检查是否已初始化并运行
+            if (isRecording) {
+                Log.w(TAG, "已经在录音状态，忽略重复启动")
+                return
+            }
 
-        val opusUtils = OpusUtils.getInstant()
-        thread {
-            val createEncoder = opusUtils.createEncoder(rate, 1, 1)
-            Log.i(TAG, "喊话7")
-            while (isRecording) {
-                Log.i(TAG, "喊话中")
-                val read = mAudioRecord!!.read(data, 0, bufferSize)
-                val ret = ByteArray(bufferSize / 8)
-                val rc = opusUtils.encode(
-                    createEncoder, Uilts.byteArrayToShortArray(data), 0, ret
-                )
-                var sendData = REAL_TIME_SHOUT.toByteArray()
-                if (AudioRecord.ERROR_INVALID_OPERATION != read) {
-                    try {
-                        sendData += ret
-                        sendData2Payload(sendData)
-                    } catch (e: IOException) {
-                        e.printStackTrace()
+            // 清理残留状态
+            cleanupAudioResources()
+
+            Log.i(TAG, "喊话1")
+            var audioSource = MediaRecorder.AudioSource.MIC //来源
+            if (platform == VehiclePlatform.H30) {
+                audioSource = MediaRecorder.AudioSource.MIC //来源
+            }
+            Log.i(TAG, "喊话2")
+            val rate = 8000 //采样频率
+            val track = AudioFormat.CHANNEL_IN_MONO //声道
+            val audioFormat = AudioFormat.ENCODING_PCM_16BIT //格式
+            var bufferSize = 960
+            if (platform == VehiclePlatform.H30) {
+                bufferSize = 640
+            }
+            Log.i(TAG, "喊话3")
+            Log.i(TAG, "startRecord...")
+            try {
+                if (mAudioRecord == null) {
+                    Log.i(TAG, "喊话4")
+                    mAudioRecord = AudioRecord(
+                        audioSource, rate,
+                        track, audioFormat, bufferSize
+                    ).apply {
+                        // 显式检查状态
+                        if (state != AudioRecord.STATE_INITIALIZED) {
+                            throw IllegalStateException("AudioRecord初始化失败")
+                        }
+                    }
+                    Log.i(TAG, "喊话5")
+                }
+                val data = ByteArray(bufferSize)
+                mAudioRecord!!.startRecording()
+                Log.i(TAG, "喊话6")
+                isRecording = true
+
+                val opusUtils = OpusUtils.getInstant()
+                recordingThread = thread {
+                    val createEncoder = opusUtils.createEncoder(rate, 1, 1)
+                    Log.i(TAG, "喊话7")
+                    while (isRecording) {
+                        Log.i(TAG, "喊话中")
+                        val read = mAudioRecord!!.read(data, 0, bufferSize)
+                        val ret = ByteArray(bufferSize / 8)
+                        val rc = opusUtils.encode(
+                            createEncoder, Uilts.byteArrayToShortArray(data), 0, ret
+                        )
+                        var sendData = REAL_TIME_SHOUT.toByteArray()
+                        if (AudioRecord.ERROR_INVALID_OPERATION != read) {
+                            try {
+                                sendData += ret
+                                sendData2Payload(sendData)
+                            } catch (e: IOException) {
+                                e.printStackTrace()
+                            }
+                        }
+                        Thread.sleep(10)
                     }
                 }
-                Thread.sleep(10)
+            } catch (e: Exception) {
+                Log.e(TAG, "启动实时喊话失败", e)
+                cleanupAudioResources()
             }
         }
     }
 
     fun stopRealTimeShout() {
-        isRecording = false
-        if (mAudioRecord != null) {
-            mAudioRecord!!.stop()
-            mAudioRecord!!.release()
-            mAudioRecord = null
+        synchronized(audioLock) {
+            isRecording = false
+
+            // 等待录音线程结束（最多200ms）
+            recordingThread?.join(200)
+            recordingThread = null
+
+            cleanupAudioResources()
+
+            // 发送停止标识，关闭喊话器的功放
+            val sendData = STOP_REAL_TIME_SHOUT.toByteArray()
+            sendData2Payload(sendData)
         }
-//        mAudioRecord?.stop()
-//        mAudioRecord?.release()
-//        mAudioRecord = null
-        // 发送停止标识，关闭喊话器的功放
-        val sendData = STOP_REAL_TIME_SHOUT.toByteArray()
-        sendData2Payload(sendData)
+    }
+
+    private fun cleanupAudioResources() {
+        try {
+            if (mAudioRecord != null) {
+                try {
+                    if (audioInitialized) {
+                        mAudioRecord!!.stop()
+                    }
+                } catch (e: IllegalStateException) {
+                    Log.w(TAG, "停止AudioRecord时发生异常（可能已释放）", e)
+                }
+
+                mAudioRecord!!.release()
+                Log.i(TAG, "AudioRecord资源已释放")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "清理音频资源失败", e)
+        } finally {
+            mAudioRecord = null
+            audioInitialized = false
+        }
     }
 
     open fun startRecord() {
