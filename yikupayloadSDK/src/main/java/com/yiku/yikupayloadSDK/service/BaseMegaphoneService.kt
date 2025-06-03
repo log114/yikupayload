@@ -217,10 +217,12 @@ open class BaseMegaphoneService {
     }
 
     open fun startRealTimeShout(isDisableRadio: Boolean) {
+        Log.i(TAG, "喊话1")
         var audioSource = MediaRecorder.AudioSource.MIC //来源
         if (platform == VehiclePlatform.H30) {
             audioSource = MediaRecorder.AudioSource.MIC //来源
         }
+        Log.i(TAG, "喊话2")
         val rate = 8000 //采样频率
         val track = AudioFormat.CHANNEL_IN_MONO //声道
         val audioFormat = AudioFormat.ENCODING_PCM_16BIT //格式
@@ -228,21 +230,27 @@ open class BaseMegaphoneService {
         if (platform == VehiclePlatform.H30) {
             bufferSize = 640
         }
+        Log.i(TAG, "喊话3")
         Log.i(TAG, "startRecord...")
         if (mAudioRecord == null) {
+            Log.i(TAG, "喊话4")
             mAudioRecord = AudioRecord(
                 audioSource, rate,
                 track, audioFormat, bufferSize
             )
+            Log.i(TAG, "喊话5")
         }
         val data = ByteArray(bufferSize)
         mAudioRecord!!.startRecording()
+        Log.i(TAG, "喊话6")
         isRecording = true
 
         val opusUtils = OpusUtils.getInstant()
         thread {
             val createEncoder = opusUtils.createEncoder(rate, 1, 1)
+            Log.i(TAG, "喊话7")
             while (isRecording) {
+                Log.i(TAG, "喊话中")
                 val read = mAudioRecord!!.read(data, 0, bufferSize)
                 val ret = ByteArray(bufferSize / 8)
                 val rc = opusUtils.encode(
@@ -266,6 +274,8 @@ open class BaseMegaphoneService {
         isRecording = false
         if (mAudioRecord != null) {
             mAudioRecord!!.stop()
+            mAudioRecord!!.release()
+            mAudioRecord = null
         }
 //        mAudioRecord?.stop()
 //        mAudioRecord?.release()
