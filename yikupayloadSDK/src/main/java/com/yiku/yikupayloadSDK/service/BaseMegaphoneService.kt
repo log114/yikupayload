@@ -73,6 +73,7 @@ open class BaseMegaphoneService {
     var getAudioFilesCallback: GetAudioFilesCallback? = null
     private val client = OkHttpClient()
     private var host = ""
+    private var needsReinitialization = false
 
     // 添加线程同步对象
     private val audioLock = Any()
@@ -232,35 +233,39 @@ open class BaseMegaphoneService {
                 return
             }
 
-            try {
-                Log.i(TAG, "喊话1")
-                var audioSource = MediaRecorder.AudioSource.MIC //来源
-                if (platform == VehiclePlatform.H30) {
-                    audioSource = MediaRecorder.AudioSource.MIC //来源
-                }
-                Log.i(TAG, "喊话2")
-                val rate = 8000 //采样频率
-                val track = AudioFormat.CHANNEL_IN_MONO //声道
-                val audioFormat = AudioFormat.ENCODING_PCM_16BIT //格式
-                var bufferSize = 960
-                if (platform == VehiclePlatform.H30) {
-                    bufferSize = 640
-                }
-                Log.i(TAG, "startRecord...")
+            Log.i(TAG, "喊话1")
+            var audioSource = MediaRecorder.AudioSource.MIC //来源
+            if (platform == VehiclePlatform.H30) {
+                audioSource = MediaRecorder.AudioSource.MIC //来源
+            }
+            Log.i(TAG, "喊话2")
+            val rate = 8000 //采样频率
+            val track = AudioFormat.CHANNEL_IN_MONO //声道
+            val audioFormat = AudioFormat.ENCODING_PCM_16BIT //格式
+            var bufferSize = 960
+            if (platform == VehiclePlatform.H30) {
+                bufferSize = 640
+            }
+            Log.i(TAG, "startRecord...")
 
-                if (mAudioRecord == null) {
-                    mAudioRecord = AudioRecord(
-                        audioSource, rate,
-                        track, audioFormat, bufferSize
-                    ).apply {
-                        // 显式检查状态
-                        if (state != AudioRecord.STATE_INITIALIZED) {
-                            throw IllegalStateException("AudioRecord初始化失败")
-                        }
+            if (needsReinitialization || mAudioRecord == null) {
+                releaseAudioResources()
+                // 创建新实例...
+                mAudioRecord = AudioRecord(
+                    audioSource, rate,
+                    track, audioFormat, bufferSize
+                ).apply {
+                    // 显式检查状态
+                    if (state != AudioRecord.STATE_INITIALIZED) {
+                        throw IllegalStateException("AudioRecord初始化失败")
                     }
-                    Log.i(TAG, "喊话3")
                 }
-                val data = ByteArray(bufferSize)
+                needsReinitialization = false
+            }
+
+            val data = ByteArray(bufferSize)
+
+            try {
                 mAudioRecord!!.startRecording()
                 Log.i(TAG, "喊话4")
                 isRecording = true
@@ -270,7 +275,7 @@ open class BaseMegaphoneService {
                 recordingThread = thread {
                     val createEncoder = opusUtils.createEncoder(rate, 1, 1)
                     Log.i(TAG, "喊话7")
-                    while (isRecording) {
+                    while (isRecording && !Thread.interrupted()) {
                         Log.i(TAG, "喊话中")
                         val read = mAudioRecord!!.read(data, 0, bufferSize)
                         val ret = ByteArray(bufferSize / 8)
@@ -288,10 +293,14 @@ open class BaseMegaphoneService {
                         }
                         Thread.sleep(10)
                     }
+                    opusUtils.destroyEncoder(createEncoder)  // 线程退出时释放编码器
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "启动实时喊话失败", e)
-                stopRecordingThread()
+            } catch (e: IllegalStateException) {
+                // 标记需要重新初始化
+                needsReinitialization = true
+                Log.w(TAG, "需要重新初始化AudioRecord", e)
+                // 递归重试
+                startRealTimeShout(isDisableRadio)
             }
         }
     }
@@ -314,7 +323,8 @@ open class BaseMegaphoneService {
             if (mAudioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                 mAudioRecord?.stop()
             }
-
+            // 添加线程中断机制，确保线程结束
+            recordingThread?.interrupt()
             // 停止线程
             recordingThread?.join(200)
             recordingThread = null
@@ -325,7 +335,7 @@ open class BaseMegaphoneService {
     }
 
     // 用于最终释放实时喊话音频资源
-    fun releaseAudioResources() {
+    open fun releaseAudioResources() {
         synchronized(audioLock) {
             try {
                 Log.i(TAG, "释放所有音频资源")
@@ -335,9 +345,15 @@ open class BaseMegaphoneService {
 
                 // 释放AudioRecord
                 if (mAudioRecord != null) {
-                    mAudioRecord?.release()
-                    mAudioRecord = null
-                    Log.i(TAG, "AudioRecord已释放")
+                    try {
+                        mAudioRecord?.release()
+                    } catch (e: IllegalStateException) {
+                        Log.e(TAG, "释放异常: ${e.message}")
+                    } finally {
+                        Log.d(TAG, "AudioRecord状态: ${mAudioRecord?.state}")
+                        mAudioRecord = null  // 强制置空
+                        Log.i(TAG, "AudioRecord已释放")
+                    }
                 }
 
                 isRecording = false
