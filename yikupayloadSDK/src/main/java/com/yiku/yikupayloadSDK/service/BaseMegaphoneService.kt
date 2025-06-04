@@ -316,8 +316,10 @@ open class BaseMegaphoneService {
     }
 
     private fun cleanupAudioResources() {
+        Log.i(TAG, "准备清理音频资源")
         try {
             if (mAudioRecord != null) {
+                Log.i(TAG, "开始清理音频资源")
                 try {
                     if (audioInitialized) {
                         mAudioRecord!!.stop()
@@ -334,6 +336,7 @@ open class BaseMegaphoneService {
         } finally {
             mAudioRecord = null
             audioInitialized = false
+            Log.i(TAG, "音频资源清理完成")
         }
     }
 
