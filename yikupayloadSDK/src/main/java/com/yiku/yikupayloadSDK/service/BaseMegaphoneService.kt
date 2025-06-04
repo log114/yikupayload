@@ -291,7 +291,12 @@ open class BaseMegaphoneService {
                                 e.printStackTrace()
                             }
                         }
-                        Thread.sleep(10)
+                        try {
+                            Thread.sleep(10) // 添加异常捕获
+                        } catch (e: InterruptedException) {
+                            Log.w(TAG, "录音线程睡眠被中断，正常退出")
+                            break // 跳出循环
+                        }
                     }
                     opusUtils.destroyEncoder(createEncoder)  // 线程退出时释放编码器
                 }
