@@ -232,27 +232,23 @@ open class BaseMegaphoneService {
                 return
             }
 
-            // 清理残留状态
-            cleanupAudioResources()
-
-            Log.i(TAG, "喊话1")
-            var audioSource = MediaRecorder.AudioSource.MIC //来源
-            if (platform == VehiclePlatform.H30) {
-                audioSource = MediaRecorder.AudioSource.MIC //来源
-            }
-            Log.i(TAG, "喊话2")
-            val rate = 8000 //采样频率
-            val track = AudioFormat.CHANNEL_IN_MONO //声道
-            val audioFormat = AudioFormat.ENCODING_PCM_16BIT //格式
-            var bufferSize = 960
-            if (platform == VehiclePlatform.H30) {
-                bufferSize = 640
-            }
-            Log.i(TAG, "喊话3")
-            Log.i(TAG, "startRecord...")
             try {
+                Log.i(TAG, "喊话1")
+                var audioSource = MediaRecorder.AudioSource.MIC //来源
+                if (platform == VehiclePlatform.H30) {
+                    audioSource = MediaRecorder.AudioSource.MIC //来源
+                }
+                Log.i(TAG, "喊话2")
+                val rate = 8000 //采样频率
+                val track = AudioFormat.CHANNEL_IN_MONO //声道
+                val audioFormat = AudioFormat.ENCODING_PCM_16BIT //格式
+                var bufferSize = 960
+                if (platform == VehiclePlatform.H30) {
+                    bufferSize = 640
+                }
+                Log.i(TAG, "startRecord...")
+
                 if (mAudioRecord == null) {
-                    Log.i(TAG, "喊话4")
                     mAudioRecord = AudioRecord(
                         audioSource, rate,
                         track, audioFormat, bufferSize
@@ -262,14 +258,15 @@ open class BaseMegaphoneService {
                             throw IllegalStateException("AudioRecord初始化失败")
                         }
                     }
-                    Log.i(TAG, "喊话5")
+                    Log.i(TAG, "喊话3")
                 }
                 val data = ByteArray(bufferSize)
                 mAudioRecord!!.startRecording()
-                Log.i(TAG, "喊话6")
+                Log.i(TAG, "喊话4")
                 isRecording = true
 
                 val opusUtils = OpusUtils.getInstant()
+                Log.i(TAG, "喊话5")
                 recordingThread = thread {
                     val createEncoder = opusUtils.createEncoder(rate, 1, 1)
                     Log.i(TAG, "喊话7")
@@ -294,7 +291,7 @@ open class BaseMegaphoneService {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "启动实时喊话失败", e)
-                cleanupAudioResources()
+                stopRecordingThread()
             }
         }
     }
@@ -303,11 +300,7 @@ open class BaseMegaphoneService {
         synchronized(audioLock) {
             isRecording = false
 
-            // 等待录音线程结束（最多200ms）
-            recordingThread?.join(200)
-            recordingThread = null
-
-            cleanupAudioResources()
+            stopRecordingThread()
 
             // 发送停止标识，关闭喊话器的功放
             val sendData = STOP_REAL_TIME_SHOUT.toByteArray()
@@ -315,28 +308,42 @@ open class BaseMegaphoneService {
         }
     }
 
-    private fun cleanupAudioResources() {
-        Log.i(TAG, "准备清理音频资源")
+    private fun stopRecordingThread() {
         try {
-            if (mAudioRecord != null) {
-                Log.i(TAG, "开始清理音频资源")
-                try {
-                    if (audioInitialized) {
-                        mAudioRecord!!.stop()
-                    }
-                } catch (e: IllegalStateException) {
-                    Log.w(TAG, "停止AudioRecord时发生异常（可能已释放）", e)
+            // 停止录音
+            if (mAudioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                mAudioRecord?.stop()
+            }
+
+            // 停止线程
+            recordingThread?.join(200)
+            recordingThread = null
+            Log.i(TAG, "录音线程已停止")
+        } catch (e: Exception) {
+            Log.e(TAG, "停止录音线程失败", e)
+        }
+    }
+
+    // 用于最终释放实时喊话音频资源
+    fun releaseAudioResources() {
+        synchronized(audioLock) {
+            try {
+                Log.i(TAG, "释放所有音频资源")
+
+                // 停止录音线程
+                stopRecordingThread()
+
+                // 释放AudioRecord
+                if (mAudioRecord != null) {
+                    mAudioRecord?.release()
+                    mAudioRecord = null
+                    Log.i(TAG, "AudioRecord已释放")
                 }
 
-                mAudioRecord!!.release()
-                Log.i(TAG, "AudioRecord资源已释放")
+                isRecording = false
+            } catch (e: Exception) {
+                Log.e(TAG, "释放资源失败", e)
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "清理音频资源失败", e)
-        } finally {
-            mAudioRecord = null
-            audioInitialized = false
-            Log.i(TAG, "音频资源清理完成")
         }
     }
 
