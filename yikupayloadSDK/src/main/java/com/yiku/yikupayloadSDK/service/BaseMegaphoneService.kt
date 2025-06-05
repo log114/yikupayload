@@ -261,12 +261,12 @@ open class BaseMegaphoneService {
                     }
                 }
                 needsReinitialization = false
+                mAudioRecord!!.startRecording()
             }
 
             val data = ByteArray(bufferSize)
 
             try {
-                mAudioRecord!!.startRecording()
                 Log.i(TAG, "喊话4")
                 isRecording = true
 
@@ -324,10 +324,6 @@ open class BaseMegaphoneService {
 
     private fun stopRecordingThread() {
         try {
-            // 停止录音
-            if (mAudioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
-                mAudioRecord?.stop()
-            }
             // 添加线程中断机制，确保线程结束
             recordingThread?.interrupt()
             // 停止线程
@@ -351,6 +347,10 @@ open class BaseMegaphoneService {
                 // 释放AudioRecord
                 if (mAudioRecord != null) {
                     try {
+                        // 停止录音
+                        if (mAudioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                            mAudioRecord?.stop()
+                        }
                         mAudioRecord?.release()
                     } catch (e: IllegalStateException) {
                         Log.e(TAG, "释放异常: ${e.message}")
