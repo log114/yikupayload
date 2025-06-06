@@ -238,12 +238,10 @@ open class BaseMegaphoneService {
                 return
             }
 
-            Log.i(TAG, "喊话1")
             var audioSource = MediaRecorder.AudioSource.MIC //来源
             if (platform == VehiclePlatform.H30) {
                 audioSource = MediaRecorder.AudioSource.MIC //来源
             }
-            Log.i(TAG, "喊话2")
             val rate = 8000 //采样频率
             val track = AudioFormat.CHANNEL_IN_MONO //声道
             val audioFormat = AudioFormat.ENCODING_PCM_16BIT //格式
@@ -272,16 +270,12 @@ open class BaseMegaphoneService {
             val data = ByteArray(bufferSize)
 
             try {
-                Log.i(TAG, "喊话4")
                 isRecording = true
 
                 val opusUtils = OpusUtils.getInstant()
-                Log.i(TAG, "喊话5")
                 recordingThread = thread {
                     val createEncoder = opusUtils.createEncoder(rate, 1, 1)
-                    Log.i(TAG, "喊话7")
                     while (isRecording && !Thread.interrupted()) {
-                        Log.i(TAG, "喊话中")
                         val read = mAudioRecord!!.read(data, 0, bufferSize)
                         val ret = ByteArray(bufferSize / 8)
                         val rc = opusUtils.encode(
