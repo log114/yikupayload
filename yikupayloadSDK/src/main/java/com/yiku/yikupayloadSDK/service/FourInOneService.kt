@@ -1,5 +1,6 @@
 package com.yiku.yikupayloadSDK.service
 
+import android.os.Build
 import android.util.Log
 import com.yiku.yikupayloadSDK.protocol.FETCH_TEMPERATURE
 import com.yiku.yikupayloadSDK.protocol.LUMINANCE_CHANGE
@@ -26,6 +27,11 @@ class FourInOneService : BaseMegaphoneService() {
     private var inputStream: InputStream? = null
     private var isConnected = false
     private var host = ""
+
+    // 定义 Linux 内核常量（Android 未公开）
+    private val TCP_KEEPIDLE = 4    // 空闲时间（秒）
+    private val TCP_KEEPINTVL = 5   // 探测间隔（秒）
+    private val TCP_KEEPCNT = 6     // 探测次数
 
     override fun setIp(ip: String) {
         host = ip
@@ -89,7 +95,30 @@ class FourInOneService : BaseMegaphoneService() {
     override fun connect(): Boolean {
         //开启一个链接，需要指定地址和端口
         return try {
-            client = Socket(host, port)
+            client = Socket(host, port).apply {
+                keepAlive = true  // 开启基础KeepAlive
+            }
+
+            // 精细参数设置（Android 7.0+）
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                try {
+                    val setOptionMethod = client!!.javaClass.getMethod(
+                        "setOption",
+                        Int::class.javaPrimitiveType,
+                        Int::class.javaPrimitiveType
+                    )
+                    // 设置空闲时间（5 秒）
+                    setOptionMethod.invoke(client, TCP_KEEPIDLE, 5)
+                    // 设置探测间隔（1 秒）
+                    setOptionMethod.invoke(client, TCP_KEEPINTVL, 1)
+                    // 设置探测次数（5 次）
+                    setOptionMethod.invoke(client, TCP_KEEPCNT, 5)
+                } catch (e: Exception) {
+                    Log.e("TAG", "反射设置失败: ${e.message}")
+                    // 降级处理：确保基础 KeepAlive 开启
+                    client!!.keepAlive = true
+                }
+            }
             out = client!!.getOutputStream()
             Log.i(TAG, "四合一连接成功")
             isConnected = true
@@ -104,7 +133,7 @@ class FourInOneService : BaseMegaphoneService() {
                         if (i == 0) {
                             continue
                         }
-                        Log.i(TAG, "===YA3Service recv:${String(recv)}")
+                        Log.i(TAG, "===YA3Service recv:${bytesToHex(recv)}")
                         val data = recv.slice(0 until i!!).toByteArray()
                         var tmp = ByteArray(0);
 

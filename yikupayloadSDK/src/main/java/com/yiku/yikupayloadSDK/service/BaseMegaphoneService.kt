@@ -189,6 +189,11 @@ open class BaseMegaphoneService {
         isPlayAlarm = true
         sendData2Payload(sendData)
     }
+    // 连接测试，发送一条无用消息
+    fun connectTest() {
+        val sendData = "[TEST]".toByteArray()
+        sendData2Payload(sendData)
+    }
 
     fun reboot(){
         val sendData = REBOOT.toByteArray()
