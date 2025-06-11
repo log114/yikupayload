@@ -3,6 +3,7 @@ package com.yiku.yikupayloadSDK.service
 import android.util.Log
 import com.yiku.yikupayloadSDK.protocol.THROWER_ALLOW_DETONATION
 import com.yiku.yikupayloadSDK.protocol.THROWER_CHARGING
+import com.yiku.yikupayloadSDK.protocol.THROWER_CHARGING_AND_ALLOW
 import com.yiku.yikupayloadSDK.protocol.THROWER_CONNECT_TEST
 import com.yiku.yikupayloadSDK.protocol.THROWER_CONTROL_ALL
 import com.yiku.yikupayloadSDK.protocol.THROWER_CONTROL_ONE
@@ -270,7 +271,7 @@ class ThrowerService {
 
     }
 
-    // 充电放电
+    // 充电放电（已弃用）
     fun charging(switch: Boolean) {
         val msg = Msg()
         msg.msgId = THROWER_CHARGING.toByte()
@@ -284,7 +285,7 @@ class ThrowerService {
         sendData2Payload(msg.getMsg())
     }
 
-    // 允许起爆
+    // 允许起爆（已弃用）
     fun allowDetonation(switch: Boolean) {
         val msg = Msg()
         msg.msgId = THROWER_ALLOW_DETONATION.toByte()
@@ -294,6 +295,21 @@ class ThrowerService {
         }
         else {
             msg.payload[0] = 0x00.toByte()
+        }
+        sendData2Payload(msg.getMsg())
+    }
+
+    // 允许起爆和开始充电
+    fun chargingAndAllowDetonation(index: Int, switch: Boolean) {
+        val msg = Msg()
+        msg.msgId = THROWER_CHARGING_AND_ALLOW.toByte()
+        msg.payload = ByteArray(4)
+        msg.payload[0] = index.toByte()
+        if(switch) {
+            msg.payload[1] = 0x01.toByte()
+        }
+        else {
+            msg.payload[1] = 0x00.toByte()
         }
         sendData2Payload(msg.getMsg())
     }
