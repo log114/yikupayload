@@ -95,37 +95,14 @@ class FourInOneService : BaseMegaphoneService() {
     override fun connect(): Boolean {
         //开启一个链接，需要指定地址和端口
         return try {
-            client = Socket(host, port).apply {
-                keepAlive = true  // 开启基础KeepAlive
-            }
-
-            // 精细参数设置（Android 7.0+）
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                try {
-                    val setOptionMethod = client!!.javaClass.getMethod(
-                        "setOption",
-                        Int::class.javaPrimitiveType,
-                        Int::class.javaPrimitiveType
-                    )
-                    // 设置空闲时间（5 秒）
-                    setOptionMethod.invoke(client, TCP_KEEPIDLE, 5)
-                    // 设置探测间隔（1 秒）
-                    setOptionMethod.invoke(client, TCP_KEEPINTVL, 1)
-                    // 设置探测次数（5 次）
-                    setOptionMethod.invoke(client, TCP_KEEPCNT, 5)
-                } catch (e: Exception) {
-                    Log.e("TAG", "反射设置失败: ${e.message}")
-                    // 降级处理：确保基础 KeepAlive 开启
-                    client!!.keepAlive = true
-                }
-            }
+            client = Socket(host, port)
             out = client!!.getOutputStream()
             Log.i(TAG, "四合一连接成功")
             isConnected = true
             inputStream = client!!.getInputStream()
             thread {
                 try {
-                    Log.i(TAG, "recv start...")
+//                    Log.i(TAG, "recv start...")
                     while (client!!.isConnected) {
                         val recv = ByteArray(1024)
                         val i = inputStream?.read(recv)
@@ -133,7 +110,7 @@ class FourInOneService : BaseMegaphoneService() {
                         if (i == 0) {
                             continue
                         }
-                        Log.i(TAG, "===YA3Service recv:${bytesToHex(recv)}")
+//                        Log.i(TAG, "===YA3Service recv:${bytesToHex(recv)}")
                         val data = recv.slice(0 until i!!).toByteArray()
                         var tmp = ByteArray(0);
 
