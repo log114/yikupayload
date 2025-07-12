@@ -212,4 +212,12 @@ open class SlowDescentDeviceService {
 
         sendData2Payload(msg.getMsg())
     }
+
+    // 定时发送，防止缓降器断连
+    fun connectTest() {
+        val msg = Msg()
+        msg.msgId = 0x01
+        msg.payload = ByteArray(0)
+        sendData2Payload(msg.getMsg())
+    }
 }
