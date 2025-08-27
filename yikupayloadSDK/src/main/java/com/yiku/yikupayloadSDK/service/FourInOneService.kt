@@ -12,6 +12,7 @@ import com.yiku.yikupayloadSDK.util.Msg
 import com.yiku.yikupayloadSDK.util.VehiclePlatform
 import com.yiku.yikupayloadSDK.util.YA3Host
 import com.yiku.yikupayloadSDK.util.bytesToHex
+import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.Socket
@@ -27,11 +28,7 @@ class FourInOneService : BaseMegaphoneService() {
     private var inputStream: InputStream? = null
     private var isConnected = false
     private var host = ""
-
-    // 定义 Linux 内核常量（Android 未公开）
-    private val TCP_KEEPIDLE = 4    // 空闲时间（秒）
-    private val TCP_KEEPINTVL = 5   // 探测间隔（秒）
-    private val TCP_KEEPCNT = 6     // 探测次数
+    private val buffer = ByteArrayOutputStream()
 
     override fun setIp(ip: String) {
         host = ip
@@ -47,51 +44,6 @@ class FourInOneService : BaseMegaphoneService() {
         setHost(host)
     }
 
-    var parseIndex = 0;
-    var recvData = ByteArray(128)
-    var recvDataLast =  ByteArray(128)
-    private fun parseByte(b: Byte): Boolean {
-        when (parseIndex) {
-            0 -> { // header
-                if (b != 0x8d.toByte()) {
-                    parseIndex = 0
-                    recvData = ByteArray(128)
-                    return false
-                }
-                recvData[0] = b
-                parseIndex++
-                return false
-
-            }
-
-            1 -> { //LEN
-                recvData[1] = b
-                parseIndex++
-                return false
-
-            }
-
-            2 -> { // MSG_ID
-                recvData[2] = b
-                parseIndex++
-                return false
-            }
-
-            else -> {
-                return if (parseIndex >= recvData[1].toInt() + 4) {
-                    parseIndex = 0
-                    recvDataLast = recvData
-                    recvData = ByteArray(128)
-                    true
-                } else {
-                    recvData[parseIndex] = b
-                    parseIndex++
-                    false
-                }
-            }
-
-        }
-    }
     override fun connect(): Boolean {
         //开启一个链接，需要指定地址和端口
         return try {
@@ -99,47 +51,60 @@ class FourInOneService : BaseMegaphoneService() {
             out = client!!.getOutputStream()
             Log.i(TAG, "四合一连接成功")
             isConnected = true
-            inputStream = client!!.getInputStream()
             thread {
                 try {
-//                    Log.i(TAG, "recv start...")
-                    while (client!!.isConnected) {
-                        val recv = ByteArray(1024)
-                        val i = inputStream?.read(recv)
-                        Log.i(TAG, "i:${i}")
-                        if (i == 0) {
-                            continue
-                        }
-//                        Log.i(TAG, "===YA3Service recv:${bytesToHex(recv)}")
-                        val data = recv.slice(0 until i!!).toByteArray()
-                        var tmp = ByteArray(0);
+                    val inputStream = client!!.getInputStream()
+                    val buffer = ByteArrayOutputStream()
+                    val recvBuffer = ByteArray(1024)
 
-                        var n = 0;
-                        data.forEach {
-                            if (it.toInt().toChar() == '[' && tmp.isNotEmpty()) {
-                                for (msgCallback in msgCallbacks) {
-                                    msgCallback.onMsg(tmp)
+                    while (true) {
+                        val bytesRead = inputStream.read(recvBuffer)
+                        if (bytesRead == -1) break
+
+                        buffer.write(recvBuffer, 0, bytesRead)
+                        val data = buffer.toByteArray()
+                        var startIndex = 0
+
+                        // 手动实现包头 [40] 查找
+                        while (startIndex <= data.size - 4) {
+                            if (data[startIndex] == '['.code.toByte() &&
+                                data[startIndex + 1] == '4'.code.toByte() &&
+                                data[startIndex + 2] == '0'.code.toByte() &&
+                                data[startIndex + 3] == ']'.code.toByte()
+                            ) {
+                                // 修复点：自定义查找结束符 ']'
+                                var endIndex = -1
+                                for (i in startIndex + 4 until data.size) {
+                                    if (data[i] == '['.code.toByte()) {
+                                        endIndex = i
+                                        break
+                                    }
                                 }
-                                tmp = ByteArray(0);
-//                            n++
-                                n = 0;
+
+                                if (endIndex != -1) { // 说明找到了下一个包的包头，有拼包
+                                    val packet = data.copyOfRange(startIndex, endIndex)
+                                    msgCallbacks.forEach { it.onMsg(packet) }
+                                    startIndex = endIndex
+                                } else { // 说明没找到下一个包的包头，无拼包
+                                    // 直接将剩余的所有数据写入进去
+                                    val packet = data.copyOfRange(startIndex, data.size)
+                                    msgCallbacks.forEach { it.onMsg(packet) }
+                                    break; // 已经处理完成，跳出循环
+                                }
+                            } else {
+                                startIndex++
                             }
-                            tmp += it
-                            n++
                         }
-                        if (String(recv).startsWith("GAF")) {
-                            getAudioFilesCallback?.onResult(String(recv).substring(3))
-                        }
+                        buffer.reset()
                     }
                 } catch (e: Exception) {
+                    isConnected = false
                     e.printStackTrace()
                 }
             }
             true
         } catch (e: Exception) {
             isConnected = false
-//            Log.e(TAG, "connect error:${e.message}")
-//            e.printStackTrace()
             false
         }
     }
