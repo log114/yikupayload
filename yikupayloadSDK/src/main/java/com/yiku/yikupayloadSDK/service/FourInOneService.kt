@@ -32,6 +32,7 @@ class FourInOneService : BaseMegaphoneService() {
 
     override fun setIp(ip: String) {
         host = ip
+        setHost(host)
     }
     override fun getIp(): String {
         return host
