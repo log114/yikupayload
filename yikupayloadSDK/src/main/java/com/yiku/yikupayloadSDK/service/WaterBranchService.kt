@@ -118,7 +118,7 @@ class WaterBranchService {
         sendData2Payload(msg.getMsg())
     }
 
-    // 水带脱困，0关，1开
+    // 水带脱困，0：手动脱困（需持续发送，停止发送后停止），1：自动脱困
     fun hoseDetachment(operateType: Int) {
         val msg = Msg();
         msg.msgId = WATERBRANCH_HOSE_DETACHMENT.toByte()
