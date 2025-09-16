@@ -69,14 +69,14 @@ open class SlowDescentDeviceService {
             }
 
             else -> {
+                recvData[parseIndex] = b
+                parseIndex++
                 return if (parseIndex >= recvData[1].toInt() + 4) {
                     parseIndex = 0
                     recvDataLast = recvData
                     recvData = ByteArray(128)
                     true
                 } else {
-                    recvData[parseIndex] = b
-                    parseIndex++
                     false
                 }
             }

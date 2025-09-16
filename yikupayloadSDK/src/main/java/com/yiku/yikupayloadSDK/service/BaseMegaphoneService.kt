@@ -253,6 +253,13 @@ open class BaseMegaphoneService {
 
             if (needsReinitialization || mAudioRecord == null) {
                 releaseAudioResources()
+                // 在创建 AudioRecord 实例前检查麦克风是否被占用
+                if (!isMicrophoneAvailable(audioSource, rate, track, audioFormat, bufferSize)) {
+                    Log.e(TAG, "无法启动录音：麦克风可能已被其他应用占用或不可用。")
+                    // 可以考虑在这里回调一个接口通知UI层，或者抛出特定的异常，或者只是记录日志并返回
+                    // 例如：showToast("麦克风被占用，请关闭其他使用麦克风的应用")
+                    return // 直接返回，不再进行后续初始化
+                }
                 // 创建新实例...
                 mAudioRecord = AudioRecord(
                     audioSource, rate,
@@ -363,6 +370,47 @@ open class BaseMegaphoneService {
                 isRecording = false
             } catch (e: Exception) {
                 Log.e(TAG, "释放资源失败", e)
+            }
+        }
+    }
+
+    /**
+     * 检查麦克风是否可用（未被其他应用占用）
+     * 注意：调用此方法前需确保已获得 RECORD_AUDIO 权限
+     */
+    private fun isMicrophoneAvailable(audioSource: Int, sampleRate: Int, channelConfig: Int, audioFormat: Int, bufferSize: Int): Boolean {
+        var audioRecord: AudioRecord? = null
+        return try {
+            audioRecord = AudioRecord(
+                audioSource,
+                sampleRate,
+                channelConfig,
+                audioFormat,
+                bufferSize
+            )
+
+            // 检查状态是否初始化成功
+            if (audioRecord.state != AudioRecord.STATE_INITIALIZED) {
+                Log.w(TAG, "Microphone check failed: AudioRecord not initialized")
+                return false
+            }
+
+            audioRecord.startRecording() // 尝试开始录制[7](@ref)
+
+            // 简单检查录制状态（可选，但能增加可靠性）
+            val isRecording = audioRecord.recordingState == AudioRecord.RECORDSTATE_RECORDING
+            Log.d(TAG, "Microphone check: Recording state = $isRecording")
+
+            isRecording // 如果成功启动录制并处于录制状态，则认为麦克风可用
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception occurred while checking microphone availability", e)
+            false // 出现异常，麦克风可能被占用或不可用
+        } finally {
+            try {
+                audioRecord?.stop() // 停止录制
+                audioRecord?.release() // 释放资源[7](@ref)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error releasing temporary AudioRecord during microphone check", e)
             }
         }
     }
