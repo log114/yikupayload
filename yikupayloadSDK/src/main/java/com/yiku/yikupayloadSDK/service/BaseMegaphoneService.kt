@@ -1,10 +1,16 @@
 package com.yiku.yikupayloadSDK.service
 
+import android.Manifest
+import android.app.AppOpsManager
+import android.content.Context
 import android.content.SharedPreferences
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresApi
+import androidx.annotation.RequiresPermission
 import com.yiku.yikupayloadSDK.protocol.ALARM_PLAY
 import com.yiku.yikupayloadSDK.protocol.AUDIO_DEL
 import com.yiku.yikupayloadSDK.protocol.AUDIO_PLAY
@@ -75,6 +81,8 @@ open class BaseMegaphoneService {
     private var host = ""
     private var needsReinitialization = false
 
+    private var context: Context? = null
+
     // 添加线程同步对象
     private val audioLock = Any()
 
@@ -100,6 +108,10 @@ open class BaseMegaphoneService {
             callbacks += callback
         }
         this.msgCallbacks = callbacks
+    }
+
+    open fun setContext(newContext: Context) {
+        context = newContext
     }
 
     open fun connect(): Boolean {
@@ -378,9 +390,32 @@ open class BaseMegaphoneService {
      * 检查麦克风是否可用（未被其他应用占用）
      * 注意：调用此方法前需确保已获得 RECORD_AUDIO 权限
      */
+    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
+    @RequiresApi(Build.VERSION_CODES.S)
     private fun isMicrophoneAvailable(audioSource: Int, sampleRate: Int, channelConfig: Int, audioFormat: Int, bufferSize: Int): Boolean {
         var audioRecord: AudioRecord? = null
         return try {
+            // 检查 Context 是否可用
+            if (context != null) {
+                // 获取 AppOpsManager
+                val appOps = context!!.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+                // 创建 AttributionSource（适用于 Android 12+）
+                val attributionSource = context!!.createAttributionContext(context!!.packageName).attributionSource
+                // 启动 RECORD_AUDIO 操作
+                val result = appOps.startOpNoThrow(
+                    AppOpsManager.OPSTR_RECORD_AUDIO,
+                    attributionSource.uid,
+                    attributionSource.packageName?: "",
+                    attributionSource.attributionTag?: "",
+                    null
+                )
+                // 检查结果
+                if (result != AppOpsManager.MODE_ALLOWED) {
+                    Log.e(TAG, "AppOpsManager explicitly denied record audio operation. Result code: $result")
+                    return false
+                }
+            }
+
             audioRecord = AudioRecord(
                 audioSource,
                 sampleRate,
