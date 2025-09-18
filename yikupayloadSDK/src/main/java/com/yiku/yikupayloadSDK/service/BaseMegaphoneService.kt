@@ -92,6 +92,8 @@ open class BaseMegaphoneService {
     // 添加音频状态标志
     private var audioInitialized = false
 
+    var onRecordingReady: (() -> Unit)? = null
+
     private lateinit var servoControlOut: OutputStream
     private var servoControlClient: Socket? = null
     open fun registMsgCallback(msgCallback: MsgCallback) {
@@ -242,6 +244,8 @@ open class BaseMegaphoneService {
         sendData2Payload(sendData)
     }
 
+    @RequiresPermission(value = "android.permission.RECORD_AUDIO")
+    @RequiresApi(value = 31)
     open fun startRealTimeShout(isDisableRadio: Boolean) {
         synchronized(audioLock) {
             // 检查是否已初始化并运行
@@ -270,6 +274,7 @@ open class BaseMegaphoneService {
                     Log.e(TAG, "无法启动录音：麦克风可能已被其他应用占用或不可用。")
                     // 可以考虑在这里回调一个接口通知UI层，或者抛出特定的异常，或者只是记录日志并返回
                     // 例如：showToast("麦克风被占用，请关闭其他使用麦克风的应用")
+                    isRecording = true
                     return // 直接返回，不再进行后续初始化
                 }
                 // 创建新实例...
@@ -284,6 +289,10 @@ open class BaseMegaphoneService {
                 }
                 needsReinitialization = false
                 mAudioRecord!!.startRecording()
+                // 添加回调调用
+                if (mAudioRecord != null && mAudioRecord!!.state == AudioRecord.STATE_INITIALIZED) {
+                    onRecordingReady?.invoke()
+                }
             }
 
             val data = ByteArray(bufferSize)
