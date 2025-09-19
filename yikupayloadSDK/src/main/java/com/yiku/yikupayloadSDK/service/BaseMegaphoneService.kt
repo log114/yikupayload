@@ -245,7 +245,6 @@ open class BaseMegaphoneService {
     }
 
     @RequiresPermission(value = "android.permission.RECORD_AUDIO")
-    @RequiresApi(value = 31)
     open fun startRealTimeShout(isDisableRadio: Boolean) {
         synchronized(audioLock) {
             // 检查是否已初始化并运行
