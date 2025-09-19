@@ -13,21 +13,6 @@ buildscript {
     }
 }
 
-allprojects {
-    // 减少缓存大小
-    configurations.configureEach {
-        resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
-        resolutionStrategy.cacheDynamicVersionsFor 0, 'seconds'
-    }
-
-    // 清理构建目录
-    tasks.withType(Delete).tap {
-        configureEach {
-            delete fileTree(dir: buildDir, include: '**/*.bin')
-        }
-    }
-}
-
 tasks.register('clean', Delete) {
     delete rootProject.buildDir
 }
