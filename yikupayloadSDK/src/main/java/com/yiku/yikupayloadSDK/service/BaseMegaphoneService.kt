@@ -94,6 +94,9 @@ open class BaseMegaphoneService {
 
     var onRecordingReady: (() -> Unit)? = null
 
+    // 添加错误回调接口
+    var onRecordingError: ((String) -> Unit)? = null
+
     private lateinit var servoControlOut: OutputStream
     private var servoControlClient: Socket? = null
     open fun registMsgCallback(msgCallback: MsgCallback) {
@@ -272,8 +275,7 @@ open class BaseMegaphoneService {
                 // 在创建 AudioRecord 实例前检查麦克风是否被占用
                 if (!isMicrophoneAvailable(audioSource, rate, track, audioFormat, bufferSize)) {
                     Log.e(TAG, "无法启动录音：麦克风可能已被其他应用占用或不可用。")
-                    // 可以考虑在这里回调一个接口通知UI层，或者抛出特定的异常，或者只是记录日志并返回
-                    // 例如：showToast("麦克风被占用，请关闭其他使用麦克风的应用")
+                    onRecordingError?.invoke("麦克风不可用，请检查权限或关闭其他使用麦克风的应用")
                     isRecording = true
                     return // 直接返回，不再进行后续初始化
                 }
@@ -393,36 +395,53 @@ open class BaseMegaphoneService {
         }
     }
 
-    /**
-     * 检查麦克风是否可用（未被其他应用占用）
-     * 注意：调用此方法前需确保已获得 RECORD_AUDIO 权限
-     */
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
-    @RequiresApi(Build.VERSION_CODES.S)
     private fun isMicrophoneAvailable(audioSource: Int, sampleRate: Int, channelConfig: Int, audioFormat: Int, bufferSize: Int): Boolean {
-        var audioRecord: AudioRecord? = null
+        // 对于低版本Android，使用简化的检查
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return isMicrophoneAvailableLegacy(audioSource, sampleRate, channelConfig, audioFormat, bufferSize)
+        }
+
+        // Android 12+ 使用完整的AppOpsManager检查
         return try {
             // 检查 Context 是否可用
-            if (context != null) {
-                // 获取 AppOpsManager
-                val appOps = context!!.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
-                // 创建 AttributionSource（适用于 Android 12+）
-                val attributionSource = context!!.createAttributionContext(context!!.packageName).attributionSource
-                // 启动 RECORD_AUDIO 操作
-                val result = appOps.startOpNoThrow(
-                    AppOpsManager.OPSTR_RECORD_AUDIO,
-                    attributionSource.uid,
-                    attributionSource.packageName?: "",
-                    attributionSource.attributionTag?: "",
-                    null
-                )
-                // 检查结果
-                if (result != AppOpsManager.MODE_ALLOWED) {
-                    Log.e(TAG, "AppOpsManager explicitly denied record audio operation. Result code: $result")
-                    return false
-                }
+            if (context == null) {
+                Log.e(TAG, "Context is null, cannot check microphone availability")
+                return false
             }
 
+            // 获取 AppOpsManager
+            val appOps = context!!.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+            // 创建 AttributionSource（适用于 Android 12+）
+            val attributionSource = context!!.createAttributionContext(context!!.packageName).attributionSource
+
+            // 启动 RECORD_AUDIO 操作
+            val result = appOps.startOpNoThrow(
+                AppOpsManager.OPSTR_RECORD_AUDIO,
+                attributionSource.uid,
+                attributionSource.packageName ?: "",
+                attributionSource.attributionTag ?: "",
+                null
+            )
+
+            // 检查结果
+            if (result != AppOpsManager.MODE_ALLOWED) {
+                Log.e(TAG, "AppOpsManager explicitly denied record audio operation. Result code: $result")
+                return false
+            }
+
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception in microphone availability check", e)
+            false
+        }
+    }
+
+    // 低版本Android的简化检查
+    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
+    private fun isMicrophoneAvailableLegacy(audioSource: Int, sampleRate: Int, channelConfig: Int, audioFormat: Int, bufferSize: Int): Boolean {
+        var audioRecord: AudioRecord? = null
+        return try {
             audioRecord = AudioRecord(
                 audioSource,
                 sampleRate,
@@ -431,32 +450,16 @@ open class BaseMegaphoneService {
                 bufferSize
             )
 
-            // 检查状态是否初始化成功
-            if (audioRecord.state != AudioRecord.STATE_INITIALIZED) {
-                Log.w(TAG, "Microphone check failed: AudioRecord not initialized")
-                return false
-            }
-
-            audioRecord.startRecording() // 尝试开始录制[7](@ref)
-
-            // 简单检查录制状态（可选，但能增加可靠性）
-            val isRecording = audioRecord.recordingState == AudioRecord.RECORDSTATE_RECORDING
-            Log.d(TAG, "Microphone check: Recording state = $isRecording")
-
-            isRecording // 如果成功启动录制并处于录制状态，则认为麦克风可用
+            audioRecord.state == AudioRecord.STATE_INITIALIZED
         } catch (e: Exception) {
-            Log.e(TAG, "Exception occurred while checking microphone availability", e)
-            false // 出现异常，麦克风可能被占用或不可用
+            Log.e(TAG, "Legacy microphone check failed", e)
+            false
         } finally {
-            try {
-                audioRecord?.stop() // 停止录制
-                audioRecord?.release() // 释放资源[7](@ref)
-            } catch (e: Exception) {
-                Log.e(TAG, "Error releasing temporary AudioRecord during microphone check", e)
-            }
+            audioRecord?.release()
         }
     }
 
+    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     open fun startRecord() {
         var audioSource = MediaRecorder.AudioSource.VOICE_COMMUNICATION //来源
         if (platform == VehiclePlatform.H30) {
