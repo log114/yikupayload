@@ -94,9 +94,6 @@ open class BaseMegaphoneService {
 
     var onRecordingReady: (() -> Unit)? = null
 
-    // 添加错误回调接口
-    var onRecordingError: ((String) -> Unit)? = null
-
     private lateinit var servoControlOut: OutputStream
     private var servoControlClient: Socket? = null
     open fun registMsgCallback(msgCallback: MsgCallback) {
@@ -275,7 +272,6 @@ open class BaseMegaphoneService {
                 // 在创建 AudioRecord 实例前检查麦克风是否被占用
                 if (!isMicrophoneAvailable(audioSource, rate, track, audioFormat, bufferSize)) {
                     Log.e(TAG, "无法启动录音：麦克风可能已被其他应用占用或不可用。")
-                    onRecordingError?.invoke("麦克风不可用，请检查权限或关闭其他使用麦克风的应用")
                     isRecording = true
                     return // 直接返回，不再进行后续初始化
                 }
