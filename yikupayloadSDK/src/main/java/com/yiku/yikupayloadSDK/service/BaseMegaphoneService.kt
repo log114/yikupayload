@@ -289,16 +289,14 @@ open class BaseMegaphoneService {
                 }
                 needsReinitialization = false
                 mAudioRecord!!.startRecording()
-                // 添加回调调用
-                if (mAudioRecord != null && mAudioRecord!!.state == AudioRecord.STATE_INITIALIZED) {
-                    onRecordingReady?.invoke()
-                }
             }
 
             val data = ByteArray(bufferSize)
 
             try {
                 isRecording = true
+                // 添加回调调用 - 在录音线程启动前
+                onRecordingReady?.invoke()
 
                 val opusUtils = OpusUtils.getInstant()
                 recordingThread = thread {
