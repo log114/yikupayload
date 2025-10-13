@@ -54,49 +54,77 @@ class FourInOneService : BaseMegaphoneService() {
             isConnected = true
             thread {
                 try {
-                    val inputStream = client!!.getInputStream()
-                    val buffer = ByteArrayOutputStream()
-                    val recvBuffer = ByteArray(1024)
+//                    val inputStream = client!!.getInputStream()
+//                    val buffer = ByteArrayOutputStream()
+//                    val recv = ByteArray(1024)
+//
+//                    while (true) {
+//                        val bytesRead = inputStream.read(recv)
+//                        if (bytesRead == -1) break
+//
+//                        buffer.write(recv, 0, bytesRead)
+//                        val data = buffer.toByteArray()
+//                        var startIndex = 0
+//
+//                        // 手动实现包头 [40] 查找
+//                        while (startIndex <= data.size - 4) {
+//                            if (data[startIndex] == '['.code.toByte() &&
+//                                data[startIndex + 1] == '4'.code.toByte() &&
+//                                data[startIndex + 2] == '0'.code.toByte() &&
+//                                data[startIndex + 3] == ']'.code.toByte()
+//                            ) {
+//                                // 修复点：自定义查找结束符 ']'
+//                                var endIndex = -1
+//                                for (i in startIndex + 4 until data.size) {
+//                                    if (data[i] == '['.code.toByte()) {
+//                                        endIndex = i
+//                                        break
+//                                    }
+//                                }
+//
+//                                if (endIndex != -1) { // 说明找到了下一个包的包头，有拼包
+//                                    val packet = data.copyOfRange(startIndex, endIndex)
+//                                    msgCallbacks.forEach { it.onMsg(packet) }
+//                                    startIndex = endIndex
+//                                } else { // 说明没找到下一个包的包头，无拼包
+//                                    // 直接将剩余的所有数据写入进去
+//                                    val packet = data.copyOfRange(startIndex, data.size)
+//                                    msgCallbacks.forEach { it.onMsg(packet) }
+//                                    break; // 已经处理完成，跳出循环
+//                                }
+//                            } else {
+//                                startIndex++
+//                            }
+//                        }
+//                        buffer.reset()
+//                    }
+                    while (client!!.isConnected) {
+                        val recv = ByteArray(1024)
+                        val i = inputStream?.read(recv)
+                        if (i == 0) {
+                            continue
+                        }
+//                        Log.i(TAG, "recv:${String(recv)}")
+                        val data = recv.slice(0 until i!!).toByteArray()
+                        var tmp = ByteArray(0);
 
-                    while (true) {
-                        val bytesRead = inputStream.read(recvBuffer)
-                        if (bytesRead == -1) break
-
-                        buffer.write(recvBuffer, 0, bytesRead)
-                        val data = buffer.toByteArray()
-                        var startIndex = 0
-
-                        // 手动实现包头 [40] 查找
-                        while (startIndex <= data.size - 4) {
-                            if (data[startIndex] == '['.code.toByte() &&
-                                data[startIndex + 1] == '4'.code.toByte() &&
-                                data[startIndex + 2] == '0'.code.toByte() &&
-                                data[startIndex + 3] == ']'.code.toByte()
-                            ) {
-                                // 修复点：自定义查找结束符 ']'
-                                var endIndex = -1
-                                for (i in startIndex + 4 until data.size) {
-                                    if (data[i] == '['.code.toByte()) {
-                                        endIndex = i
-                                        break
+                        data.forEach {
+                            if(it.toInt().toChar() == '[') {
+                                if (tmp.isNotEmpty() && tmp.size >= 4) {
+                                    for (msgCallback in msgCallbacks) {
+                                        msgCallback.onMsg(tmp)
                                     }
                                 }
-
-                                if (endIndex != -1) { // 说明找到了下一个包的包头，有拼包
-                                    val packet = data.copyOfRange(startIndex, endIndex)
-                                    msgCallbacks.forEach { it.onMsg(packet) }
-                                    startIndex = endIndex
-                                } else { // 说明没找到下一个包的包头，无拼包
-                                    // 直接将剩余的所有数据写入进去
-                                    val packet = data.copyOfRange(startIndex, data.size)
-                                    msgCallbacks.forEach { it.onMsg(packet) }
-                                    break; // 已经处理完成，跳出循环
-                                }
-                            } else {
-                                startIndex++
+                                tmp = ByteArray(0);
                             }
+                            tmp += it
                         }
-                        buffer.reset()
+                        if (tmp.isNotEmpty() && tmp.size >= 4) {
+                            for (msgCallback in msgCallbacks) {
+                                msgCallback.onMsg(tmp)
+                            }
+                            tmp = ByteArray(0);
+                        }
                     }
                 } catch (e: Exception) {
                     isConnected = false
