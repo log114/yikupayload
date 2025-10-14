@@ -52,6 +52,7 @@ class FourInOneService : BaseMegaphoneService() {
             out = client!!.getOutputStream()
             Log.i(TAG, "四合一连接成功")
             isConnected = true
+            val inputStream = client!!.getInputStream()
             thread {
                 try {
 //                    val inputStream = client!!.getInputStream()
