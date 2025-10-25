@@ -1,4 +1,4 @@
-package com.yiku.yikupayloadSDK.service
+package com.yiku.yikupayloadSDK.externalService
 
 import android.util.Log
 import com.yiku.yikupayloadSDK.protocol.FETCH_TEMPERATURE
@@ -10,6 +10,7 @@ import com.yiku.yikupayloadSDK.protocol.TRIPOD_HEAD
 import com.yiku.yikupayloadSDK.util.LightHost
 import com.yiku.yikupayloadSDK.util.Msg
 import com.yiku.yikupayloadSDK.util.MsgCallback
+import com.yiku.yikupayloadSDK.util.PL_Msg
 import com.yiku.yikupayloadSDK.util.Short2ByteArray
 import com.yiku.yikupayloadSDK.util.bytesToHex
 import java.io.InputStream
@@ -19,19 +20,18 @@ import java.util.ArrayList
 import java.util.Date
 import kotlin.concurrent.thread
 
-open class LightService {
-    private val TAG = "LightService"
-
+open class PL_LightService {
+    private val TAG = "PL_LightService"
     var msgCallbacks: List<MsgCallback> = ArrayList()
-
-    private var globalTid = 0L
-
     private val port = 8519
     private var client: Socket? = null
     private var out: OutputStream? = null
     private var inputStream: InputStream? = null
     private var isConnected = false
     private var host = ""
+
+    private val PTZCONTROL = 0x30.toByte()
+    private val LEDCONTROL = 0x2C.toByte()
 
     open fun setIp(ip: String) {
         host = ip
@@ -71,20 +71,14 @@ open class LightService {
             }
             client = Socket(host, port)
             out = client?.getOutputStream()
-            Log.i(TAG, "探照灯连接成功")
+            Log.i(TAG, "品灵探照灯连接成功")
             isConnected = true
             inputStream = client?.getInputStream()
-            globalTid = Date().time
             thread {
                 try {
-                    val vTid = globalTid
-
                     Log.i(TAG, "recv start...")
                     isConnected = true
                     while (client?.isConnected == true) {
-                        if (vTid != globalTid) {
-                            break
-                        }
                         val recv = ByteArray(1024)
                         inputStream?.read(recv)
                         if (recv.isEmpty()) {
@@ -102,10 +96,6 @@ open class LightService {
             true
         } catch (e: Exception) {
             isConnected = false
-//            Log.i(TAG, "灯连接失败，ip: ${host}，端口:${port}")
-//            Log.e(TAG, "connect error:${e.message}")
-//            e.printStackTrace()
-//            showToast("连接失败")
             false
         }
     }
@@ -113,7 +103,7 @@ open class LightService {
     open fun sendData2Payload(data: ByteArray): Int {
         thread {
             try {
-                Log.i(TAG, "探照灯，sendData:${bytesToHex(data)}")
+                Log.i(TAG, "品灵探照灯，sendData:${bytesToHex(data)}")
                 //向输出流中写入数据，传向服务端
                 val firstTime = Date().time
                 if (!isConnected || !client?.isConnected!!) {
@@ -137,20 +127,96 @@ open class LightService {
         return 0
     }
 
+    /**
+     * 云台回中
+     */
+    open fun PTZToCenter() {
+        val msg = Msg()
+        msg.msgId = PTZCONTROL
+        val sendData = ByteArray(14)
+        sendData[0] = 0x04
+        msg.payload = sendData
+        sendData2Payload(msg.getMsg())
+    }
 
     /**
-     * 开关灯控制/查询
-     * open 开关状态 0关 1开
-     * query 是否查询状态
+     * 云台控制，手动速度模式，回中位置为0点
      */
-    open fun openLight(open: Int, query: Boolean) {
+    open fun PTZCtrlBySpeed(yawSpeed: Int, picthSpeed: Int, rollSpeed: Int) {
         val msg = Msg()
-        msg.msgId = OPEN_CLOSE_LIGHT
-        if (!query) {
-            msg.payload = byteArrayOf(open.toByte())
+        msg.msgId = PTZCONTROL
+        val sendData = ByteArray(14)
+        val yawSpeedData = speedToTwoByteArray(yawSpeed)
+        val picthSpeedData = speedToTwoByteArray(picthSpeed)
+        val rollSpeedData = speedToTwoByteArray(rollSpeed)
+        sendData[0] = 0x01 // 手动速度模式
+        yawSpeedData.copyInto(sendData, 1)
+        picthSpeedData.copyInto(sendData, 3)
+        rollSpeedData.copyInto(sendData, 5)
+
+        msg.payload = sendData
+        sendData2Payload(msg.getMsg())
+    }
+
+    /**
+     * 云台控制，绝对角度控制，回中位置为0点
+     */
+    open fun PTZCtrlByAngle(yaw: Int, picth: Int, roll: Int) {
+        val msg = Msg()
+        msg.msgId = PTZCONTROL
+        val sendData = ByteArray(14)
+        val yawData = angleToTwoByteArray(yaw)
+        val picthData = angleToTwoByteArray(picth)
+        val rollData = angleToTwoByteArray(roll)
+        sendData[0] = 0x0B // 手动绝对角度模式
+        yawData.copyInto(sendData, 1)
+        picthData.copyInto(sendData, 3)
+        rollData.copyInto(sendData, 5)
+
+        msg.payload = sendData
+        sendData2Payload(msg.getMsg())
+    }
+
+    /**
+     * 开关灯控制
+     * open 开关状态 false关 true开
+     */
+    open fun openLight(open: Boolean) {
+        val msg = PL_Msg()
+        msg.msgId = LEDCONTROL
+        msg.payload = byteArrayOf(3)
+        msg.payload[0] = 0x74
+        if (open) {
+            msg.payload[1] = 0x01
         } else {
-            msg.payload = byteArrayOf()
+            msg.payload[1] = 0x02
         }
+        sendData2Payload(msg.getMsg())
+    }
+
+    /**
+     * 闪烁频率设置
+     * frequency 闪烁频率，2、5、10、15Hz
+     */
+    open fun setFlashingFrequency(frequency: Int) {
+        val msg = PL_Msg()
+        msg.msgId = LEDCONTROL
+        msg.payload = byteArrayOf(3)
+        msg.payload[0] = 0x74
+        msg.payload[1] = 0x0B
+        msg.payload[2] = frequency.toByte()
+        sendData2Payload(msg.getMsg())
+    }
+
+    /**
+     * 打开闪烁模式（没有关闭命令，关闭LDE再重启LDE的时候，会变回常量模式）
+     */
+    open fun startFlashing() {
+        val msg = PL_Msg()
+        msg.msgId = LEDCONTROL
+        msg.payload = byteArrayOf(3)
+        msg.payload[0] = 0x74
+        msg.payload[1] = 0x09
         sendData2Payload(msg.getMsg())
     }
 
@@ -158,70 +224,48 @@ open class LightService {
      * 亮度调整
      *
      * lum 亮度值 0-100
-     * query 是否为查询
      */
-    open fun luminanceChange(lum: Int, query: Boolean) {
+    open fun luminanceChange(lum: Int) {
         val msg = Msg()
-        msg.msgId = LUMINANCE_CHANGE
-        if (!query) {
-            msg.payload = byteArrayOf(lum.toByte())
-        } else {
-            msg.payload = byteArrayOf()
+        msg.msgId = LEDCONTROL
+        msg.payload = byteArrayOf(3)
+        msg.payload[0] = 0x74
+        msg.payload[1] = 0x0A
+        msg.payload[2] = lum.toByte()
+        sendData2Payload(msg.getMsg())
+    }
+
+    /**
+    * 速度转byteArray，1bit=0.01°
+    * */
+    fun speedToTwoByteArray(speed: Int): ByteArray {
+        val value = speed * 100
+        // 直接对32位Int进行位运算，提取高8位和低8位
+        return byteArrayOf(
+            ((value ushr 8) and 0xFF).toByte(),  // 获取第8-15位（高8位）
+            (value and 0xFF).toByte()            // 获取第0-7位（低8位）
+        )
+    }
+
+    /**
+     * 角度转byteArray，1bit=360/65536°
+     * angle值应该在-180到179之间
+     * */
+    fun angleToTwoByteArray(angle: Int): ByteArray {
+        var value = 0
+        if(angle > 179) {
+            value = (angle - 360) * 65536 / 360
         }
-        sendData2Payload(msg.getMsg())
-    }
-
-    /**
-     * 爆闪
-     * open 1 开 0 关
-     */
-    open fun sharpFlash(open: Int, query: Boolean) {
-        val msg = Msg()
-        msg.msgId = SHARP_FLASH
-        if (!query) {
-            msg.payload = byteArrayOf(open.toByte())
-        } else {
-            msg.payload = byteArrayOf()
+        else if(angle < -180){
+            value = (angle + 360) * 65536 / 360
         }
-        sendData2Payload(msg.getMsg())
-    }
-
-    /**
-     * 获取温度
-     *
-     */
-    open fun fetchTemperature() {
-        val msg = Msg()
-        msg.msgId = FETCH_TEMPERATURE
-        msg.payload = byteArrayOf()
-        sendData2Payload(msg.getMsg())
-    }
-
-    open fun redBlueLedControl(model: Byte) {
-        val msg = Msg()
-        msg.msgId = RED_BLUE_FLASHES
-        msg.payload = byteArrayOf(model)
-        sendData2Payload(msg.getMsg())
-    }
-
-    /**
-     * 云台控制
-     */
-    open fun gimbalControl(picth: Short, roll: Short, yaw: Short) {
-        val msg = Msg()
-        msg.msgId = TRIPOD_HEAD
-        val sendData = ByteArray(6)
-        val picthData = Short2ByteArray.short2Bytes(picth)
-        val rollData = Short2ByteArray.short2Bytes(roll)
-        val yawData = Short2ByteArray.short2Bytes(yaw)
-        sendData[0] = picthData[0]
-        sendData[1] = picthData[1]
-        sendData[2] = rollData[0]
-        sendData[3] = rollData[1]
-        sendData[4] = yawData[0]
-        sendData[5] = yawData[1]
-
-        msg.payload = sendData
-        sendData2Payload(msg.getMsg())
+        else {
+            value = angle * 65536 / 360
+        }
+        // 直接对32位Int进行位运算，提取高8位和低8位
+        return byteArrayOf(
+            ((value ushr 8) and 0xFF).toByte(),  // 获取第8-15位（高8位）
+            (value and 0xFF).toByte()            // 获取第0-7位（低8位）
+        )
     }
 }
