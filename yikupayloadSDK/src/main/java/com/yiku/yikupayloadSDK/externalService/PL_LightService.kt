@@ -1,18 +1,10 @@
 package com.yiku.yikupayloadSDK.externalService
 
 import android.util.Log
-import com.yiku.yikupayloadSDK.protocol.FETCH_TEMPERATURE
-import com.yiku.yikupayloadSDK.protocol.LUMINANCE_CHANGE
-import com.yiku.yikupayloadSDK.protocol.OPEN_CLOSE_LIGHT
-import com.yiku.yikupayloadSDK.protocol.RED_BLUE_FLASHES
-import com.yiku.yikupayloadSDK.protocol.SHARP_FLASH
-import com.yiku.yikupayloadSDK.protocol.TRIPOD_HEAD
-import com.yiku.yikupayloadSDK.util.LightHost
 import com.yiku.yikupayloadSDK.util.Msg
 import com.yiku.yikupayloadSDK.util.MsgCallback
 import com.yiku.yikupayloadSDK.util.PLLightHost
 import com.yiku.yikupayloadSDK.util.PL_Msg
-import com.yiku.yikupayloadSDK.util.Short2ByteArray
 import com.yiku.yikupayloadSDK.util.bytesToHex
 import java.io.InputStream
 import java.io.OutputStream
@@ -185,7 +177,7 @@ open class PL_LightService {
     open fun openLight(open: Boolean) {
         val msg = PL_Msg()
         msg.msgId = LEDCONTROL
-        val sendData = byteArrayOf(3)
+        val sendData = ByteArray(3)
         msg.payload[0] = 0x74
         if (open) {
             sendData[1] = 0x01
@@ -203,7 +195,7 @@ open class PL_LightService {
     open fun setFlashingFrequency(frequency: Int) {
         val msg = PL_Msg()
         msg.msgId = LEDCONTROL
-        val sendData = byteArrayOf(3)
+        val sendData = ByteArray(3)
         sendData[0] = 0x74
         sendData[1] = 0x0B
         sendData[2] = frequency.toByte()
@@ -217,7 +209,7 @@ open class PL_LightService {
     open fun startFlashing() {
         val msg = PL_Msg()
         msg.msgId = LEDCONTROL
-        val sendData = byteArrayOf(3)
+        val sendData = ByteArray(3)
         sendData[0] = 0x74
         sendData[1] = 0x09
         msg.payload = sendData
@@ -232,7 +224,7 @@ open class PL_LightService {
     open fun luminanceChange(lum: Int) {
         val msg = Msg()
         msg.msgId = LEDCONTROL
-        val sendData = byteArrayOf(3)
+        val sendData = ByteArray(3)
         sendData[0] = 0x74
         sendData[1] = 0x0A
         sendData[2] = lum.toByte()
