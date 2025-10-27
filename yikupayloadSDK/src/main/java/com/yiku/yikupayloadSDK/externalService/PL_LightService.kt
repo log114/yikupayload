@@ -10,6 +10,7 @@ import com.yiku.yikupayloadSDK.protocol.TRIPOD_HEAD
 import com.yiku.yikupayloadSDK.util.LightHost
 import com.yiku.yikupayloadSDK.util.Msg
 import com.yiku.yikupayloadSDK.util.MsgCallback
+import com.yiku.yikupayloadSDK.util.PLLightHost
 import com.yiku.yikupayloadSDK.util.PL_Msg
 import com.yiku.yikupayloadSDK.util.Short2ByteArray
 import com.yiku.yikupayloadSDK.util.bytesToHex
@@ -67,7 +68,7 @@ open class PL_LightService {
         //开启一个链接，需要指定地址和端口
         return try {
             if(host == ""){
-                host = LightHost
+                host = PLLightHost
             }
             client = Socket(host, port)
             out = client?.getOutputStream()

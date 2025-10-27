@@ -14,3 +14,4 @@ const val ExtinguisherHost = "192.168.144.32"// 灭火罐
 const val WaterGunHost = "192.168.144.33"// 清洗水枪
 const val BucketHost = "192.168.144.34"// 吊桶
 const val WaterBranchHost = "192.168.144.35"// 消防水枪
+const val PLLightHost = "192.168.144.36"// 品灵探照灯
