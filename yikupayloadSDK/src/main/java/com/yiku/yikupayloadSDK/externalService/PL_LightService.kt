@@ -1,7 +1,6 @@
 package com.yiku.yikupayloadSDK.externalService
 
 import android.util.Log
-import com.yiku.yikupayloadSDK.util.Msg
 import com.yiku.yikupayloadSDK.util.MsgCallback
 import com.yiku.yikupayloadSDK.util.PLLightHost
 import com.yiku.yikupayloadSDK.util.PL_Msg
@@ -124,7 +123,7 @@ open class PL_LightService {
      * 云台回中
      */
     open fun PTZToCenter() {
-        val msg = Msg()
+        val msg = PL_Msg()
         msg.msgId = PTZCONTROL
         val sendData = ByteArray(14)
         sendData[0] = 0x04
@@ -136,7 +135,7 @@ open class PL_LightService {
      * 云台控制，手动速度模式，回中位置为0点
      */
     open fun PTZCtrlBySpeed(yawSpeed: Int, picthSpeed: Int, rollSpeed: Int) {
-        val msg = Msg()
+        val msg = PL_Msg()
         msg.msgId = PTZCONTROL
         val sendData = ByteArray(14)
         val yawSpeedData = speedToTwoByteArray(yawSpeed)
@@ -155,7 +154,7 @@ open class PL_LightService {
      * 云台控制，绝对角度控制，回中位置为0点
      */
     open fun PTZCtrlByAngle(yaw: Int, picth: Int, roll: Int) {
-        val msg = Msg()
+        val msg = PL_Msg()
         msg.msgId = PTZCONTROL
         val sendData = ByteArray(14)
         val yawData = angleToTwoByteArray(yaw)
@@ -222,7 +221,7 @@ open class PL_LightService {
      * lum 亮度值 0-100
      */
     open fun luminanceChange(lum: Int) {
-        val msg = Msg()
+        val msg = PL_Msg()
         msg.msgId = LEDCONTROL
         val sendData = ByteArray(3)
         sendData[0] = 0x74
