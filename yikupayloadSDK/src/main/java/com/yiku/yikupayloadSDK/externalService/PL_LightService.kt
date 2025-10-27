@@ -185,13 +185,14 @@ open class PL_LightService {
     open fun openLight(open: Boolean) {
         val msg = PL_Msg()
         msg.msgId = LEDCONTROL
-        msg.payload = byteArrayOf(3)
+        val sendData = byteArrayOf(3)
         msg.payload[0] = 0x74
         if (open) {
-            msg.payload[1] = 0x01
+            sendData[1] = 0x01
         } else {
-            msg.payload[1] = 0x02
+            sendData[1] = 0x02
         }
+        msg.payload = sendData
         sendData2Payload(msg.getMsg())
     }
 
@@ -202,10 +203,11 @@ open class PL_LightService {
     open fun setFlashingFrequency(frequency: Int) {
         val msg = PL_Msg()
         msg.msgId = LEDCONTROL
-        msg.payload = byteArrayOf(3)
-        msg.payload[0] = 0x74
-        msg.payload[1] = 0x0B
-        msg.payload[2] = frequency.toByte()
+        val sendData = byteArrayOf(3)
+        sendData[0] = 0x74
+        sendData[1] = 0x0B
+        sendData[2] = frequency.toByte()
+        msg.payload = sendData
         sendData2Payload(msg.getMsg())
     }
 
@@ -215,9 +217,10 @@ open class PL_LightService {
     open fun startFlashing() {
         val msg = PL_Msg()
         msg.msgId = LEDCONTROL
-        msg.payload = byteArrayOf(3)
-        msg.payload[0] = 0x74
-        msg.payload[1] = 0x09
+        val sendData = byteArrayOf(3)
+        sendData[0] = 0x74
+        sendData[1] = 0x09
+        msg.payload = sendData
         sendData2Payload(msg.getMsg())
     }
 
@@ -229,10 +232,11 @@ open class PL_LightService {
     open fun luminanceChange(lum: Int) {
         val msg = Msg()
         msg.msgId = LEDCONTROL
-        msg.payload = byteArrayOf(3)
-        msg.payload[0] = 0x74
-        msg.payload[1] = 0x0A
-        msg.payload[2] = lum.toByte()
+        val sendData = byteArrayOf(3)
+        sendData[0] = 0x74
+        sendData[1] = 0x0A
+        sendData[2] = lum.toByte()
+        msg.payload = sendData
         sendData2Payload(msg.getMsg())
     }
 
