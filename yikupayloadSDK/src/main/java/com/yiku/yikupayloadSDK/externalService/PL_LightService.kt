@@ -178,7 +178,7 @@ open class PL_LightService {
         val msg = PL_Msg()
         msg.msgId = LEDCONTROL
         val sendData = ByteArray(3)
-        msg.payload[0] = 0x74
+        sendData[0] = 0x74
         if (open) {
             sendData[1] = 0x01
         } else {

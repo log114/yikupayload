@@ -14,7 +14,7 @@ data class PL_Msg(
     private var checksum: Byte = 0x00.toByte()
 ) {
     fun getMsg(): ByteArray {
-        len = (payload.size + 2).toByte() // 长度包含len本身和校验码checksum
+        len = (payload.size + 3).toByte() // 长度包含len本身和校验码checksum
         var checksumData = ByteArray(0)
         checksumData += header
         checksumData += len
