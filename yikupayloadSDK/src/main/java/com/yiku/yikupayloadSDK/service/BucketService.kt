@@ -2,8 +2,8 @@ package com.yiku.yikupayloadSDK.service
 
 import android.util.Log
 import com.yiku.yikupayloadSDK.protocol.BUCKET_BARREL_CONTROL
-import com.yiku.yikupayloadSDK.protocol.BUCKET_BARREL_SAFETY_SWITCH
 import com.yiku.yikupayloadSDK.protocol.BUCKET_HOOK_CONTROL
+import com.yiku.yikupayloadSDK.protocol.BUCKET_SAFETY_SWITCH
 import com.yiku.yikupayloadSDK.util.BucketHost
 import com.yiku.yikupayloadSDK.util.Msg
 import com.yiku.yikupayloadSDK.util.MsgCallback
@@ -112,8 +112,8 @@ class BucketService {
     // 操作吊桶安全开关，0关，1开
     fun safetySwitch(switch: Int) {
         val msg = Msg();
-        msg.msgId = BUCKET_BARREL_SAFETY_SWITCH.toByte()
-        msg.payload = ByteArray(4)
+        msg.msgId = BUCKET_SAFETY_SWITCH.toByte()
+        msg.payload = ByteArray(1)
         msg.payload[0] = switch.toByte()
         sendData2Payload(msg.getMsg())
     }
