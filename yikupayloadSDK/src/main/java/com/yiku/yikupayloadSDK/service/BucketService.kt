@@ -2,8 +2,8 @@ package com.yiku.yikupayloadSDK.service
 
 import android.util.Log
 import com.yiku.yikupayloadSDK.protocol.BUCKET_BARREL_CONTROL
+import com.yiku.yikupayloadSDK.protocol.BUCKET_BARREL_SAFETY_SWITCH
 import com.yiku.yikupayloadSDK.protocol.BUCKET_HOOK_CONTROL
-import com.yiku.yikupayloadSDK.protocol.BUCKET_STATE_SEND
 import com.yiku.yikupayloadSDK.util.BucketHost
 import com.yiku.yikupayloadSDK.util.Msg
 import com.yiku.yikupayloadSDK.util.MsgCallback
@@ -109,6 +109,15 @@ class BucketService {
         }
     }
 
+    // 操作吊桶安全开关，0关，1开
+    fun safetySwitch(switch: Int) {
+        val msg = Msg();
+        msg.msgId = BUCKET_BARREL_SAFETY_SWITCH.toByte()
+        msg.payload = ByteArray(4)
+        msg.payload[0] = switch.toByte()
+        sendData2Payload(msg.getMsg())
+    }
+
     // 操作吊桶开关，0停，1开（升），2关（降）
     fun barrelControl(controlType: Int) {
         val msg = Msg();
@@ -124,14 +133,6 @@ class BucketService {
         msg.msgId = BUCKET_HOOK_CONTROL.toByte()
         msg.payload = ByteArray(4)
         msg.payload[0] = controlType.toByte()
-        sendData2Payload(msg.getMsg())
-    }
-
-    // 发送心跳包
-    fun heartbeat() {
-        val msg = Msg();
-        msg.msgId = BUCKET_STATE_SEND.toByte()
-        msg.payload = ByteArray(4)
         sendData2Payload(msg.getMsg())
     }
 }

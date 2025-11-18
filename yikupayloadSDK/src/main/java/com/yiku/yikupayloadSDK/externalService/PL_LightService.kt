@@ -132,7 +132,7 @@ open class PL_LightService {
     }
 
     /**
-     * 云台控制，手动速度模式，回中位置为0点
+     * 云台控制，手动速度模式
      */
     open fun PTZCtrlBySpeed(yawSpeed: Int, picthSpeed: Int, rollSpeed: Int) {
         val msg = PL_Msg()
