@@ -156,6 +156,14 @@ class AllInOneService : BaseMegaphoneService() {
         } else (client!!.isConnected && isConnected)
     }
 
+    // 断连
+    fun disConnect() {
+        if(getIsConnected()) {
+            isConnected = false
+            client?.close()
+        }
+    }
+
     // 安全开关控制
     fun safetySwitch(isOpen: Boolean) {
         val msg = Msg()
