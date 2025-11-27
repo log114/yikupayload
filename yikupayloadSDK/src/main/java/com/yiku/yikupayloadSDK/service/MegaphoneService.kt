@@ -28,11 +28,6 @@ class MegaphoneService : BaseMegaphoneService() {
     private var isConnected = false
     private var host = ""
 
-    // 定义 Linux 内核常量（Android 未公开）
-    private val TCP_KEEPIDLE = 4    // 空闲时间（秒）
-    private val TCP_KEEPINTVL = 5   // 探测间隔（秒）
-    private val TCP_KEEPCNT = 6     // 探测次数
-
     override fun setIp(ip: String) {
         host = ip
         setHost(host)
