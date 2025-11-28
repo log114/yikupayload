@@ -144,7 +144,7 @@ class AllInOneService : BaseMegaphoneService() {
             try {
                 Log.i(TAG, "多合一，sendData:${bytesToHex(data)}")
                 //向输出流中写入数据，传向服务端
-                if (getIsConnected()) {
+                if (!getIsConnected()) {
                     connect()
                 }
                 out?.write(data)
