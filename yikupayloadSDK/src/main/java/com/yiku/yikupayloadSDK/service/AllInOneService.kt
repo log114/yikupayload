@@ -255,7 +255,7 @@ class AllInOneService : BaseMegaphoneService() {
     override fun redBlueLedControl(model: Byte) {
         val msg = Msg()
         msg.msgId = ALLINONE_RED_AND_BLUE_CONTROL.toByte()
-        msg.payload = ByteArray(2)
+        msg.payload = ByteArray(1)
         msg.payload[0] = model
         sendData2Payload(msg.getMsg())
     }
