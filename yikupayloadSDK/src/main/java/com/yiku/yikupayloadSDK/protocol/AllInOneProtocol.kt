@@ -16,3 +16,8 @@ const val ALLINONE_DETONATE_HEIGHT = 0x27 // 设置引爆高度
 * 16-23：2号弹状态：起爆充电状态（0：不允许，1：允许，2：正在充电，127：未连接），高度状态（0：高度不足，1：高度充足），保留，保留，总状态（0：无法引爆，1：可以引爆），保留，保留，保留
 * */
 const val ALLINONE_STATE = 0x25 // 多合一状态返回
+
+// 俯仰控制，端口：12345
+const val ALLINONE_PITCH_CONTROL = 0x10 // 俯仰控制
+// 每500ms上报一次，payload包含两个字节，高位在前，数值是0-900，对应0-90度
+const val ALLINONE_PITCH_STATE = 0x11 // 俯仰角度上报（500ms）

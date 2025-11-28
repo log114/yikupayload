@@ -6,12 +6,14 @@ import com.yiku.yikupayloadSDK.protocol.ALLINONE_DETONATE_HEIGHT
 import com.yiku.yikupayloadSDK.protocol.ALLINONE_FLASH_SWITCH
 import com.yiku.yikupayloadSDK.protocol.ALLINONE_LIGHT_LUMINANCE
 import com.yiku.yikupayloadSDK.protocol.ALLINONE_LIGHT_SWITCH
+import com.yiku.yikupayloadSDK.protocol.ALLINONE_PITCH_CONTROL
 import com.yiku.yikupayloadSDK.protocol.ALLINONE_RED_AND_BLUE_CONTROL
 import com.yiku.yikupayloadSDK.protocol.ALLINONE_SAFETY_SWITCH
 import com.yiku.yikupayloadSDK.protocol.ALLINONE_THROWER_CONTROL
 import com.yiku.yikupayloadSDK.protocol.OPEN_CLOSE_LIGHT
 import com.yiku.yikupayloadSDK.util.AllInOneHost
 import com.yiku.yikupayloadSDK.util.Msg
+import com.yiku.yikupayloadSDK.util.MsgCallback
 import com.yiku.yikupayloadSDK.util.VehiclePlatform
 import com.yiku.yikupayloadSDK.util.bytesToHex
 import java.io.InputStream
@@ -27,6 +29,12 @@ class AllInOneService : BaseMegaphoneService() {
     private var inputStream: InputStream? = null
     private var isConnected = false
     private var host = ""
+    private val ptzPort = 12345
+    private var ptzClient: Socket? = null
+    private var ptzOut: OutputStream? = null
+    private var ptzInputStream: InputStream? = null
+    private var ptzIsConnected = false
+    var ptzMsgCallbacks: List<MsgCallback> = ArrayList()
 
     override fun setIp(ip: String) {
         host = ip
@@ -275,6 +283,141 @@ class AllInOneService : BaseMegaphoneService() {
         msg.msgId = ALLINONE_DETONATE_HEIGHT.toByte()
         msg.payload = ByteArray(2)
         msg.payload[0] = height.toByte()
+        sendData2Payload(msg.getMsg())
+    }
+
+    var ptzParseIndex = 0;
+    var ptzRecvData = ByteArray(128)
+    var ptzRecvDataLast =  ByteArray(128)
+    private fun ptzParseByte(b: Byte): Boolean {
+        when (ptzParseIndex) {
+            0 -> { // header
+                if (b != 0x8d.toByte()) {
+                    ptzParseIndex = 0
+                    ptzRecvData = ByteArray(128)
+                    return false
+                }
+                ptzRecvData[0] = b
+                ptzParseIndex++
+                return false
+
+            }
+            1 -> { //LEN
+                ptzRecvData[1] = b
+                ptzParseIndex++
+                return false
+
+            }
+            2 -> { // MSG_ID
+                ptzRecvData[2] = b
+                ptzParseIndex++
+                return false
+            }
+            else -> {
+                ptzRecvData[ptzParseIndex] = b
+                ptzParseIndex++
+                return if (ptzParseIndex >= ptzRecvData[1].toInt() + 4) {
+                    ptzParseIndex = 0
+                    ptzRecvDataLast = ptzRecvData
+                    ptzRecvData = ByteArray(128)
+                    true
+                } else {
+                    false
+                }
+            }
+
+        }
+    }
+
+    fun registPtzMsgCallback(msgCallback: MsgCallback) {
+        this.ptzMsgCallbacks += msgCallback
+    }
+
+    fun ptzConnect(): Boolean {
+        //开启一个链接，需要指定地址和端口
+        return try {
+            Log.i(TAG, "连接多合一云台")
+            ptzClient = Socket(host, ptzPort)
+
+            ptzOut = ptzClient!!.getOutputStream()
+            Log.i(TAG, "多合一云台连接成功")
+            ptzIsConnected = true
+            ptzInputStream = ptzClient!!.getInputStream()
+            thread {
+                try {
+                    while (ptzClient!!.isConnected) {
+                        val recv = ByteArray(1024)
+                        val i = ptzInputStream?.read(recv)
+                        if (i == 0) {
+                            continue
+                        }
+//                        Log.i(TAG, "recv:${String(recv)}")
+                        val data = recv.slice(0 until i!!).toByteArray()
+
+                        data.forEach {
+                            run {
+                                if (ptzParseByte(it)) {
+                                    for (msgCallback in ptzMsgCallbacks) {
+                                        msgCallback.onMsg(ptzRecvDataLast)
+                                    }
+                                }
+
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.i(TAG, "多合一信息获取失败：$e")
+                    e.printStackTrace()
+                }
+            }
+            true
+        } catch (e: Exception) {
+            ptzIsConnected = false
+            false
+        }
+    }
+
+    fun ptzSendData2Payload(data: ByteArray): Int {
+        thread {
+            try {
+                Log.i(TAG, "多合一云台，sendData:${bytesToHex(data)}")
+                //向输出流中写入数据，传向服务端
+                if (!getIsPtzConnected()) {
+                    ptzConnect()
+                }
+                ptzOut?.write(data)
+            } catch (e: java.lang.Exception) {
+                e.printStackTrace()
+                Log.e(TAG, "传输失败，重试中...")
+                ptzSendData2Payload(data)
+            }
+        }
+        return 0
+
+    }
+
+    fun getIsPtzConnected(): Boolean {
+        return if (ptzClient == null) {
+            false
+        } else (ptzClient!!.isConnected && ptzIsConnected)
+    }
+
+    // 云台断连
+    fun disConnectPtz() {
+        if(getIsPtzConnected()) {
+            ptzIsConnected = false
+            ptzClient?.close()
+        }
+    }
+
+    // 云台俯仰控制(0-900，对应0-90°)
+    fun pitchControl(pitch: Int) {
+        val msg = Msg()
+        msg.msgId = ALLINONE_PITCH_CONTROL.toByte()
+        msg.payload = ByteArray(2).apply {
+            this[0] = ((pitch ushr 8) and 0xFF).toByte()  // 高字节
+            this[1] = (pitch and 0xFF).toByte()           // 低字节
+        }
         sendData2Payload(msg.getMsg())
     }
 }
