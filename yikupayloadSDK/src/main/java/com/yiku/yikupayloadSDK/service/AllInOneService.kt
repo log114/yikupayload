@@ -418,6 +418,6 @@ class AllInOneService : BaseMegaphoneService() {
             this[0] = ((pitch ushr 8) and 0xFF).toByte()  // 高字节
             this[1] = (pitch and 0xFF).toByte()           // 低字节
         }
-        sendData2Payload(msg.getMsg())
+        ptzSendData2Payload(msg.getMsg())
     }
 }
