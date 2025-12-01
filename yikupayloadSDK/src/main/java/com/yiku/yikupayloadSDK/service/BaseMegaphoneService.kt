@@ -636,8 +636,14 @@ open class BaseMegaphoneService {
             MultipartBody.Builder().setType(MultipartBody.FORM) //文件和json参数共同上传
         val MEDIA_TYPE_MARKDOWN: MediaType? = "text/x-markdown; charset=utf-8".toMediaTypeOrNull()
         if (file != null) { //添加文件到form-data
-            val body = RequestBody.create(MEDIA_TYPE_MARKDOWN, file)
-            // 参数分别为， 请求key ，文件名称 ， RequestBody
+//            val body = RequestBody.create(MEDIA_TYPE_MARKDOWN, file)
+//            // 参数分别为， 请求key ，文件名称 ， RequestBody
+//            requestBody.addFormDataPart("file", file.name, body)
+
+            // 🔥 关键修改：使用您的 ProgressRequestBody 而不是默认的 RequestBody
+            val body = ProgressRequestBody(MEDIA_TYPE_MARKDOWN!!, file, callback)
+
+            // 参数分别为：请求key，文件名称，RequestBody
             requestBody.addFormDataPart("file", file.name, body)
         }
         val request =
