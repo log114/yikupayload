@@ -29,6 +29,14 @@ class AllInOneService : BaseMegaphoneService() {
     private var inputStream: InputStream? = null
     private var isConnected = false
     private var host = ""
+    // 照明灯、红蓝灯和抛投
+    private val mainPort = 8529
+    private var mainClient: Socket? = null
+    private var mainOut: OutputStream? = null
+    private var mainInputStream: InputStream? = null
+    private var mainIsConnected = false
+    var mainMsgCallbacks: List<MsgCallback> = ArrayList()
+    // 俯仰
     private val ptzPort = 12345
     private var ptzClient: Socket? = null
     private var ptzOut: OutputStream? = null
@@ -52,86 +60,16 @@ class AllInOneService : BaseMegaphoneService() {
         setHost(host)
     }
 
-    var parseIndex = 0;
-    var recvData = ByteArray(128)
-    var recvDataLast =  ByteArray(128)
-    private fun parseByte(b: Byte): Boolean {
-        when (parseIndex) {
-            0 -> { // header
-                if (b != 0x8d.toByte()) {
-                    parseIndex = 0
-                    recvData = ByteArray(128)
-                    return false
-                }
-                recvData[0] = b
-                parseIndex++
-                return false
-
-            }
-            1 -> { //LEN
-                recvData[1] = b
-                parseIndex++
-                return false
-
-            }
-            2 -> { // MSG_ID
-                recvData[2] = b
-                parseIndex++
-                return false
-            }
-            else -> {
-                recvData[parseIndex] = b
-                parseIndex++
-                return if (parseIndex >= recvData[1].toInt() + 4) {
-                    parseIndex = 0
-                    recvDataLast = recvData
-                    recvData = ByteArray(128)
-                    true
-                } else {
-                    false
-                }
-            }
-
-        }
-    }
-
     override fun connect(): Boolean {
         //开启一个链接，需要指定地址和端口
         return try {
-            Log.i(TAG, "连接多合一")
+            Log.i(TAG, "连接多合一喊话器")
             client = Socket(host, port)
 
             out = client!!.getOutputStream()
-            Log.i(TAG, "多合一连接成功")
+            Log.i(TAG, "多合一喊话器连接成功")
             isConnected = true
             inputStream = client!!.getInputStream()
-            thread {
-                try {
-                    while (client!!.isConnected) {
-                        val recv = ByteArray(1024)
-                        val i = inputStream?.read(recv)
-                        if (i == 0) {
-                            continue
-                        }
-//                        Log.i(TAG, "recv:${String(recv)}")
-                        val data = recv.slice(0 until i!!).toByteArray()
-
-                        data.forEach {
-                            run {
-                                if (parseByte(it)) {
-                                    for (msgCallback in msgCallbacks) {
-                                        msgCallback.onMsg(recvDataLast)
-                                    }
-                                }
-
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.i(TAG, "多合一信息获取失败：$e")
-                    e.printStackTrace()
-                }
-            }
             true
         } catch (e: Exception) {
             isConnected = false
@@ -142,7 +80,7 @@ class AllInOneService : BaseMegaphoneService() {
     override fun sendData2Payload(data: ByteArray): Int {
         thread {
             try {
-                Log.i(TAG, "多合一，sendData:${bytesToHex(data)}")
+                Log.i(TAG, "多合一喊话器，sendData:${bytesToHex(data)}")
                 //向输出流中写入数据，传向服务端
                 if (!getIsConnected()) {
                     connect()
@@ -155,7 +93,6 @@ class AllInOneService : BaseMegaphoneService() {
             }
         }
         return 0
-
     }
 
     override fun getIsConnected(): Boolean {
@@ -172,6 +109,125 @@ class AllInOneService : BaseMegaphoneService() {
         }
     }
 
+    var mainParseIndex = 0;
+    var mainRecvData = ByteArray(128)
+    var mainRecvDataLast =  ByteArray(128)
+    private fun mainParseByte(b: Byte): Boolean {
+        when (mainParseIndex) {
+            0 -> { // header
+                if (b != 0x8d.toByte()) {
+                    mainParseIndex = 0
+                    mainRecvData = ByteArray(128)
+                    return false
+                }
+                mainRecvData[0] = b
+                mainParseIndex++
+                return false
+
+            }
+            1 -> { //LEN
+                mainRecvData[1] = b
+                mainParseIndex++
+                return false
+
+            }
+            2 -> { // MSG_ID
+                mainRecvData[2] = b
+                mainParseIndex++
+                return false
+            }
+            else -> {
+                mainRecvData[mainParseIndex] = b
+                mainParseIndex++
+                return if (mainParseIndex >= mainRecvData[1].toInt() + 4) {
+                    mainParseIndex = 0
+                    mainRecvDataLast = mainRecvData
+                    mainRecvData = ByteArray(128)
+                    true
+                } else {
+                    false
+                }
+            }
+
+        }
+    }
+    // 照明灯、红蓝灯和抛投用端口8529
+    fun mainConnect(): Boolean {
+        //开启一个链接，需要指定地址和端口
+        return try {
+            Log.i(TAG, "连接多合一")
+            mainClient = Socket(host, mainPort)
+
+            mainOut = mainClient!!.getOutputStream()
+            Log.i(TAG, "多合一连接成功")
+            mainIsConnected = true
+            mainInputStream = mainClient!!.getInputStream()
+            thread {
+                try {
+                    while (mainClient!!.isConnected) {
+                        val recv = ByteArray(1024)
+                        val i = mainInputStream?.read(recv)
+                        if (i == 0) {
+                            continue
+                        }
+//                        Log.i(TAG, "recv:${String(recv)}")
+                        val data = recv.slice(0 until i!!).toByteArray()
+
+                        data.forEach {
+                            run {
+                                if (mainParseByte(it)) {
+                                    for (msgCallback in mainMsgCallbacks) {
+                                        msgCallback.onMsg(mainRecvDataLast)
+                                    }
+                                }
+
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.i(TAG, "多合一信息获取失败：$e")
+                    e.printStackTrace()
+                }
+            }
+            true
+        } catch (e: Exception) {
+            mainIsConnected = false
+            false
+        }
+    }
+
+    fun mainSendData2Payload(data: ByteArray): Int {
+        thread {
+            try {
+                Log.i(TAG, "多合一，sendData:${bytesToHex(data)}")
+                //向输出流中写入数据，传向服务端
+                if (!getMainIsConnected()) {
+                    mainConnect()
+                }
+                mainOut?.write(data)
+            } catch (e: java.lang.Exception) {
+                e.printStackTrace()
+                Log.e(TAG, "传输失败，重试中...")
+                mainSendData2Payload(data)
+            }
+        }
+        return 0
+    }
+
+    fun getMainIsConnected(): Boolean {
+        return if (mainClient == null) {
+            false
+        } else (mainClient!!.isConnected && mainIsConnected)
+    }
+
+    // 断连
+    fun mainDisConnect() {
+        if(getIsConnected()) {
+            mainIsConnected = false
+            mainClient?.close()
+        }
+    }
+
     // 安全开关控制
     fun safetySwitch(isOpen: Boolean) {
         val msg = Msg()
@@ -185,7 +241,7 @@ class AllInOneService : BaseMegaphoneService() {
         else {
             msg.payload[0] = 0x00.toByte()
         }
-        sendData2Payload(msg.getMsg())
+        mainSendData2Payload(msg.getMsg())
     }
 
     // 开关灯
@@ -201,7 +257,7 @@ class AllInOneService : BaseMegaphoneService() {
         else {
             msg.payload[0] = 0x00.toByte()
         }
-        sendData2Payload(msg.getMsg())
+        mainSendData2Payload(msg.getMsg())
     }
 
     // 亮度调节（0-30）
@@ -215,7 +271,7 @@ class AllInOneService : BaseMegaphoneService() {
         else {
             msg.payload[0] = lum.toByte()
         }
-        sendData2Payload(msg.getMsg())
+        mainSendData2Payload(msg.getMsg())
     }
 
     // 爆闪开关
@@ -231,7 +287,7 @@ class AllInOneService : BaseMegaphoneService() {
         else {
             msg.payload[0] = 0x00.toByte()
         }
-        sendData2Payload(msg.getMsg())
+        mainSendData2Payload(msg.getMsg())
     }
 
     // 抛投开关，index:0全部，1是1号，2是2号
@@ -248,7 +304,7 @@ class AllInOneService : BaseMegaphoneService() {
         else {
             msg.payload[1] = 0x00.toByte()
         }
-        sendData2Payload(msg.getMsg())
+        mainSendData2Payload(msg.getMsg())
     }
 
     // 红蓝模式控制
@@ -257,7 +313,7 @@ class AllInOneService : BaseMegaphoneService() {
         msg.msgId = ALLINONE_RED_AND_BLUE_CONTROL.toByte()
         msg.payload = ByteArray(1)
         msg.payload[0] = model
-        sendData2Payload(msg.getMsg())
+        mainSendData2Payload(msg.getMsg())
     }
 
     // 灭火弹充电放电，index:1是1号，2是2号
@@ -274,7 +330,7 @@ class AllInOneService : BaseMegaphoneService() {
         else {
             msg.payload[1] = 0x00.toByte()
         }
-        sendData2Payload(msg.getMsg())
+        mainSendData2Payload(msg.getMsg())
     }
 
     // 设置引爆高度
@@ -283,7 +339,7 @@ class AllInOneService : BaseMegaphoneService() {
         msg.msgId = ALLINONE_DETONATE_HEIGHT.toByte()
         msg.payload = ByteArray(2)
         msg.payload[0] = height.toByte()
-        sendData2Payload(msg.getMsg())
+        mainSendData2Payload(msg.getMsg())
     }
 
     var ptzParseIndex = 0;
