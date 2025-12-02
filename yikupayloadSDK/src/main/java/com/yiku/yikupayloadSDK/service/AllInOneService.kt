@@ -151,6 +151,10 @@ class AllInOneService : BaseMegaphoneService() {
 
         }
     }
+
+    fun registMainMsgCallback(msgCallback: MsgCallback) {
+        this.mainMsgCallbacks += msgCallback
+    }
     // 照明灯、红蓝灯和抛投用端口8529
     fun mainConnect(): Boolean {
         //开启一个链接，需要指定地址和端口
