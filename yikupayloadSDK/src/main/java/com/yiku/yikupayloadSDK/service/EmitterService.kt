@@ -163,8 +163,9 @@ open class EmitterService {
     fun launch(index: Int) {
         val msg = Msg()
         msg.msgId = EMITTER_LUNCH.toByte()
-        msg.payload = ByteArray(16)
+        msg.payload = ByteArray(10)
         msg.payload[index] = 0x01.toByte()
+        msg.payload[6] = 0x01.toByte() // 第七位默认为1（安全开关）
         sendData2Payload(msg.getMsg())
     }
 }
