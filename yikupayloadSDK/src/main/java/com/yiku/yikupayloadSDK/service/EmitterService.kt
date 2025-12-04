@@ -168,4 +168,16 @@ open class EmitterService {
         msg.payload[6] = 0x01.toByte() // 第七位默认为1（安全开关）
         sendData2Payload(msg.getMsg())
     }
+
+    fun safetySwitch(isOpen: Boolean) {
+        val msg = Msg()
+        msg.msgId = EMITTER_LUNCH.toByte()
+        msg.payload = ByteArray(10)
+        msg.payload[6] = if(isOpen) {
+            0x01.toByte()
+        } else {
+            0x00.toByte()
+        } // 第七位默认为1（安全开关）
+        sendData2Payload(msg.getMsg())
+    }
 }
