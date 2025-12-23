@@ -63,6 +63,22 @@ open class LightService {
         return connect()
     }
 
+    // 断连
+    open fun disConnect() {
+        if(getIsConnected()) {
+            isConnected = false
+            if (out != null) {
+                out?.close()
+            }
+            if (inputStream != null) {
+                inputStream?.close()
+            }
+            if (client != null && client?.isConnected == true) {
+                client?.close()
+            }
+        }
+    }
+
     open fun connect(): Boolean {
         //开启一个链接，需要指定地址和端口
         return try {
