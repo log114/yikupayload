@@ -41,7 +41,7 @@ open class LightService {
     }
 
     open fun getIsConnected(): Boolean {
-        return isConnected
+        return isConnected && client?.isConnected == true
     }
 
     open fun registMsgCallback(msgCallback: MsgCallback) {
@@ -131,13 +131,8 @@ open class LightService {
             try {
                 Log.i(TAG, "探照灯，sendData:${bytesToHex(data)}")
                 //向输出流中写入数据，传向服务端
-                val firstTime = Date().time
-                if (!isConnected || !client?.isConnected!!) {
-                    Log.i(
-                        TAG,
-                        "重新连接: isConnected:${isConnected}"
-                    )
-                    reConnect()
+                if (!getIsConnected()) {
+                    return@thread
                 }
                 if (out == null) {
                     Log.i(TAG, "out is null")
