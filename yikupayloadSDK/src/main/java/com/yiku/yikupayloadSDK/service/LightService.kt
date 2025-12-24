@@ -141,8 +141,8 @@ open class LightService {
                 out?.write(data)
             } catch (e: java.lang.Exception) {
                 e.printStackTrace()
-                Log.e(TAG, "传输失败，重试中...")
-                sendData2Payload(data)
+                Log.e(TAG, "探照灯发送消息失败...")
+//                sendData2Payload(data)
             }
         }
         return 0
