@@ -83,13 +83,14 @@ class AllInOneService : BaseMegaphoneService() {
                 Log.i(TAG, "多合一喊话器，sendData:${bytesToHex(data)}")
                 //向输出流中写入数据，传向服务端
                 if (!getIsConnected()) {
-                    connect()
+                    Log.d(TAG, "未发送，喊话器未连接")
+                    return@thread
                 }
                 out?.write(data)
             } catch (e: java.lang.Exception) {
                 e.printStackTrace()
-                Log.e(TAG, "传输失败，重试中...")
-                sendData2Payload(data)
+                Log.e(TAG, "传输失败，可能连接已断开...")
+                disConnect()
             }
         }
         return 0
@@ -105,7 +106,15 @@ class AllInOneService : BaseMegaphoneService() {
     fun disConnect() {
         if(getIsConnected()) {
             isConnected = false
-            client?.close()
+            if (out != null) {
+                out?.close()
+            }
+            if (inputStream != null) {
+                inputStream?.close()
+            }
+            if (client != null && client?.isConnected == true) {
+                client?.close()
+            }
         }
     }
 
@@ -206,13 +215,14 @@ class AllInOneService : BaseMegaphoneService() {
                 Log.i(TAG, "多合一，sendData:${bytesToHex(data)}")
                 //向输出流中写入数据，传向服务端
                 if (!getMainIsConnected()) {
-                    mainConnect()
+                    Log.d(TAG, "main未连接，不发送")
+                    return@thread
                 }
                 mainOut?.write(data)
             } catch (e: java.lang.Exception) {
                 e.printStackTrace()
-                Log.e(TAG, "传输失败，重试中...")
-                mainSendData2Payload(data)
+                Log.e(TAG, "传输失败，可能是main连接已断开...")
+                mainDisConnect()
             }
         }
         return 0
@@ -226,9 +236,17 @@ class AllInOneService : BaseMegaphoneService() {
 
     // 断连
     fun mainDisConnect() {
-        if(getIsConnected()) {
+        if(getMainIsConnected()) {
             mainIsConnected = false
-            mainClient?.close()
+            if (mainOut != null) {
+                mainOut?.close()
+            }
+            if (mainInputStream != null) {
+                mainInputStream?.close()
+            }
+            if (mainClient != null && mainClient?.isConnected == true) {
+                mainClient?.close()
+            }
         }
     }
 
@@ -443,13 +461,14 @@ class AllInOneService : BaseMegaphoneService() {
                 Log.i(TAG, "多合一云台，sendData:${bytesToHex(data)}")
                 //向输出流中写入数据，传向服务端
                 if (!getIsPtzConnected()) {
-                    ptzConnect()
+                    Log.d(TAG, "ptz未连接，不发送")
+                    return@thread
                 }
                 ptzOut?.write(data)
             } catch (e: java.lang.Exception) {
                 e.printStackTrace()
-                Log.e(TAG, "传输失败，重试中...")
-                ptzSendData2Payload(data)
+                Log.e(TAG, "传输失败，可能是ptz连接已断开...")
+                disConnectPtz()
             }
         }
         return 0
@@ -466,7 +485,15 @@ class AllInOneService : BaseMegaphoneService() {
     fun disConnectPtz() {
         if(getIsPtzConnected()) {
             ptzIsConnected = false
-            ptzClient?.close()
+            if (ptzOut != null) {
+                ptzOut?.close()
+            }
+            if (ptzInputStream != null) {
+                ptzInputStream?.close()
+            }
+            if (ptzClient != null && ptzClient?.isConnected == true) {
+                ptzClient?.close()
+            }
         }
     }
 
