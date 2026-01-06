@@ -38,9 +38,9 @@ class UpgradeMsg(
 }
 
 /**
- * Modbus CRC16 计算与验证工具
- * 标准：多项式 0x8005，初始值 0xFFFF，输入输出反转，结果异或 0x0000
- * 输出：低字节在前 (Little-endian)
+ * Modbus CRC16 计算工具（支持高字节在前输出）
+ * 标准算法参数：多项式 0x8005（计算中使用其位反转形式 0xA001），初始值 0xFFFF
+ * 输出格式：高字节在前 (Big-endian)
  */
 object ModbusCRC16 {
 
@@ -57,55 +57,61 @@ object ModbusCRC16 {
         var crc = INITIAL_VALUE
 
         for (byte in data) {
-            // 将每个字节与CRC寄存器的低8位进行异或（由于Refin=True，数据需按位反转，但通过使用0xA001并右移已隐含此操作）
             crc = crc xor (byte.toInt() and 0xFF)
-            // 处理每个字节的8个位
             for (j in 0..7) {
-                // 检查最低位 (LSB)
                 if (crc and 0x0001 != 0) {
-                    crc = crc shr 1  // 右移一位
+                    crc = crc shr 1
                     crc = crc xor POLYNOMIAL
                 } else {
                     crc = crc shr 1
                 }
             }
         }
-        // 注意：计算结果是完整的16位CRC值，但按照Modbus RTU协议，传输时需要低字节在前。
         return crc.toUShort()
     }
 
     /**
-     * 将CRC16值转换为低字节在前的ByteArray（长度为2）
-     * 这是Modbus RTU帧的附加格式。
+     * 将CRC16值转换为高字节在前的ByteArray（长度为2）
+     * 这是您要求的自定义格式。
      * @param crc 计算出的CRC16值
-     * @return 长度为2的ByteArray，index0为低字节，index1为高字节
+     * @return 长度为2的ByteArray，index0为高字节，index1为低字节
      */
     fun crcToBytes(crc: UShort): ByteArray {
-        val lowByte = (crc.toInt() and 0xFF).toByte()   // 低8位
         val highByte = ((crc.toInt() ushr 8) and 0xFF).toByte() // 高8位
-        // Modbus RTU 要求低字节在前传输
-        return byteArrayOf(lowByte, highByte)
+        val lowByte = (crc.toInt() and 0xFF).toByte()           // 低8位
+        // 您的要求：高字节在前
+        return byteArrayOf(highByte, lowByte)
     }
 
     /**
      * 验证接收到的完整数据帧（数据+CRC）的CRC是否正确
+     * 注意：此函数假设接收到的帧中CRC部分也是高字节在前
      * @param frame 完整的帧，包括最后的2字节CRC
      * @return true如果CRC校验通过
      */
     fun verifyFrame(frame: ByteArray): Boolean {
         if (frame.size < 3) {
-            return false // 帧长度不足以包含地址/功能码和CRC
+            return false
         }
-        // 提取数据部分（除去最后2字节CRC）
         val dataLength = frame.size - 2
         val dataPart = frame.copyOfRange(0, dataLength)
-        // 计算数据部分的CRC
+
         val calculatedCRC = calculateCRC(dataPart)
-        // 从帧中提取附加的CRC（低字节在前）
-        val receivedCRCLow = frame[dataLength].toInt() and 0xFF
-        val receivedCRCHigh = frame[dataLength + 1].toInt() and 0xFF
-        val receivedCRC = (receivedCRCHigh shl 8) or receivedCRCLow // 重组为UShort
+
+        // 从帧中提取附加的CRC（高字节在前）
+        val receivedCRCHigh = frame[dataLength].toInt() and 0xFF
+        val receivedCRCLow = frame[dataLength + 1].toInt() and 0xFF
+        val receivedCRC = (receivedCRCHigh shl 8) or receivedCRCLow
 
         return (calculatedCRC.toInt() == receivedCRC)
+    }
+
+    /**
+     * 快速计算并返回完整帧（数据+CRC）
+     */
+    fun calculateFullFrame(data: ByteArray): ByteArray {
+        val crc = calculateCRC(data)
+        val crcBytes = crcToBytes(crc)
+        return data + crcBytes
     }
 }
