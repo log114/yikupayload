@@ -37,100 +37,75 @@ class UpgradeMsg(
     }
 }
 
+/**
+ * Modbus CRC16 计算与验证工具
+ * 标准：多项式 0x8005，初始值 0xFFFF，输入输出反转，结果异或 0x0000
+ * 输出：低字节在前 (Little-endian)
+ */
 object ModbusCRC16 {
-    // 多项式: x^16 + x^15 + x^2 + 1 (0x8005)，但计算时使用其位反转形式0xA001
-    private const val POLYNOMIAL = 0xA001  // 修正：使用位反转多项式
 
-    // 初始值: 0xFFFF
+    // 算法参数
+    private const val POLYNOMIAL = 0xA001   // 0x8005 的位反转形式，便于右移计算
     private const val INITIAL_VALUE = 0xFFFF
 
-    // 预计算的CRC表（查表法加速）
-    private val crcTable = IntArray(256)
-
-    init {
-        // 正确初始化CRC表[5](@ref)
-        for (i in 0 until 256) {
-            var crc = i
-            for (j in 0 until 8) {
-                if (crc and 0x0001 != 0) {
-                    crc = (crc shr 1) xor POLYNOMIAL
-                } else {
-                    crc = crc shr 1
-                }
-            }
-            crcTable[i] = crc
-        }
-    }
-
     /**
-     * 计算CRC16/MODBUS校验值（标准实现）
-     * @param data 要计算CRC的数据（从地址字段到数据字段）
-     * @return CRC16校验值
+     * 计算给定数据的 Modbus CRC16 校验值
+     * @param data 要计算校验和的数据（不包括最后的2字节CRC字段）
+     * @return CRC16 校验值
      */
     fun calculateCRC(data: ByteArray): UShort {
         var crc = INITIAL_VALUE
 
         for (byte in data) {
-            // 标准Modbus CRC计算，不需要字节位反转[1](@ref)
-            val index = (crc xor (byte.toInt() and 0xFF)) and 0xFF
-            crc = (crc ushr 8) xor crcTable[index]
-        }
-
-        return crc.toUShort()
-    }
-
-    /**
-     * 替代方案：直接计算法（更容易验证）
-     */
-    fun calculateCRCDirect(data: ByteArray): UShort {
-        var crc = INITIAL_VALUE
-
-        for (byte in data) {
+            // 将每个字节与CRC寄存器的低8位进行异或（由于Refin=True，数据需按位反转，但通过使用0xA001并右移已隐含此操作）
             crc = crc xor (byte.toInt() and 0xFF)
-            for (j in 0 until 8) {
+            // 处理每个字节的8个位
+            for (j in 0..7) {
+                // 检查最低位 (LSB)
                 if (crc and 0x0001 != 0) {
-                    crc = (crc shr 1) xor POLYNOMIAL
+                    crc = crc shr 1  // 右移一位
+                    crc = crc xor POLYNOMIAL
                 } else {
                     crc = crc shr 1
                 }
             }
         }
-
+        // 注意：计算结果是完整的16位CRC值，但按照Modbus RTU协议，传输时需要低字节在前。
         return crc.toUShort()
     }
 
     /**
-     * 将CRC值转换为Modbus字节顺序（低字节在前）
+     * 将CRC16值转换为低字节在前的ByteArray（长度为2）
+     * 这是Modbus RTU帧的附加格式。
+     * @param crc 计算出的CRC16值
+     * @return 长度为2的ByteArray，index0为低字节，index1为高字节
      */
     fun crcToBytes(crc: UShort): ByteArray {
-        return byteArrayOf(
-            (crc.toInt() and 0xFF).toByte(),        // 低字节在前
-            ((crc.toInt() shr 8) and 0xFF).toByte() // 高字节在后
-        )
+        val lowByte = (crc.toInt() and 0xFF).toByte()   // 低8位
+        val highByte = ((crc.toInt() ushr 8) and 0xFF).toByte() // 高8位
+        // Modbus RTU 要求低字节在前传输
+        return byteArrayOf(lowByte, highByte)
     }
 
     /**
-     * 验证数据包的CRC校验
+     * 验证接收到的完整数据帧（数据+CRC）的CRC是否正确
+     * @param frame 完整的帧，包括最后的2字节CRC
+     * @return true如果CRC校验通过
      */
-    fun verifyPacket(
-        packet: ByteArray,
-        dataStart: Int,
-        dataEnd: Int,
-        crcPosition: Int
-    ): Boolean {
-        require(packet.size >= crcPosition + 2) { "数据包长度不足" }
+    fun verifyFrame(frame: ByteArray): Boolean {
+        if (frame.size < 3) {
+            return false // 帧长度不足以包含地址/功能码和CRC
+        }
+        // 提取数据部分（除去最后2字节CRC）
+        val dataLength = frame.size - 2
+        val dataPart = frame.copyOfRange(0, dataLength)
+        // 计算数据部分的CRC
+        val calculatedCRC = calculateCRC(dataPart)
+        // 从帧中提取附加的CRC（低字节在前）
+        val receivedCRCLow = frame[dataLength].toInt() and 0xFF
+        val receivedCRCHigh = frame[dataLength + 1].toInt() and 0xFF
+        val receivedCRC = (receivedCRCHigh shl 8) or receivedCRCLow // 重组为UShort
 
-        // 提取要计算CRC的数据部分
-        val dataToCheck = packet.copyOfRange(dataStart, dataEnd + 1)
-
-        // 计算CRC
-        val calculatedCRC = calculateCRC(dataToCheck)
-
-        // 提取包中的CRC值（低字节在前格式）
-        val packetCRCLow = packet[crcPosition].toInt() and 0xFF
-        val packetCRCHigh = packet[crcPosition + 1].toInt() and 0xFF
-        val packetCRC = (packetCRCHigh shl 8) or packetCRCLow  // 修正字节顺序
-
-        return calculatedCRC.toInt() == packetCRC
+        return (calculatedCRC.toInt() == receivedCRC)
     }
 }
