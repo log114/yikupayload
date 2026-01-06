@@ -25,15 +25,15 @@ class UpgradeMsg(
             checksumData += data
         }
         checksum = ModbusCRC16.crcToBytes(ModbusCRC16.calculateCRC(checksumData))
-        var data = ByteArray(0)
-        data += header
-        data += len
-        data += address
-        data += commandType
-        data += msgId
-        data += data
-        data += checksum
-        return data
+        var sendData = ByteArray(0)
+        sendData += header
+        sendData += len
+        sendData += address
+        sendData += commandType
+        sendData += msgId
+        sendData += data
+        sendData += checksum
+        return sendData
     }
 }
 
