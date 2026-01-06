@@ -105,13 +105,4 @@ object ModbusCRC16 {
 
         return (calculatedCRC.toInt() == receivedCRC)
     }
-
-    /**
-     * 快速计算并返回完整帧（数据+CRC）
-     */
-    fun calculateFullFrame(data: ByteArray): ByteArray {
-        val crc = calculateCRC(data)
-        val crcBytes = crcToBytes(crc)
-        return data + crcBytes
-    }
 }
