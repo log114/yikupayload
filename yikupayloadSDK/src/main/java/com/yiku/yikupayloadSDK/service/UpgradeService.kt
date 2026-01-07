@@ -146,10 +146,14 @@ class UpgradeService {
     }
 
     // 下发升级数据包
-    fun transmissionPackage(data: ByteArray) {
+    fun transmissionPackage(totalPackageNum: Int, packageIndex: Int, packageData: ByteArray) {
         val msg = UpgradeMsg()
         msg.msgId = UPGRADE_TRANSMISSION_PACKAGE.toByte()
-        msg.data = data
+        msg.data = ByteArray(0)
+        msg.data += intToLittleEndianByteArray(totalPackageNum)
+        msg.data += intToLittleEndianByteArray(packageIndex)
+        msg.data += intToLittleEndianByteArray(packageData.size)
+        msg.data += packageData
         sendData2Payload(msg.getMsg())
     }
 
@@ -207,5 +211,32 @@ class UpgradeService {
             result = result or ((bytes[i].toInt() and 0xFF) shl (8 * i))
         }
         return result
+    }
+
+    /**
+     * 小端序ByteArray(2) → Int
+     */
+    fun littleEndianToInt(byteArray: ByteArray, startIndex: Int = 0): Int {
+        require(byteArray.size >= startIndex + 2) {
+            "字节数组从索引${startIndex}开始长度不足2字节"
+        }
+
+        val lowByte = byteArray[startIndex].toInt() and 0xFF
+        val highByte = byteArray[startIndex + 1].toInt() and 0xFF
+
+        return (highByte shl 8) or lowByte
+    }
+    /**
+     * Int → 小端序ByteArray(2)
+     */
+    fun intToLittleEndianByteArray(value: Int): ByteArray {
+        require(value >= -32768 && value <= 65535) {
+            "数值超出2字节表示范围: $value"
+        }
+
+        return byteArrayOf(
+            (value and 0xFF).toByte(),        // 低字节
+            ((value ushr 8) and 0xFF).toByte()  // 高字节
+        )
     }
 }
