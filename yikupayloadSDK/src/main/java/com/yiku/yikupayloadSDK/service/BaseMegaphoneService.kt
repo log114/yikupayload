@@ -51,7 +51,9 @@ import okhttp3.FormBody
 import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
-import okhttp3.RequestBody
+
+import org.webrtc.voiceengine.WebRtcAudioEffects
+
 
 
 interface UploadFileCallback {
@@ -279,6 +281,14 @@ open class BaseMegaphoneService {
                     // 显式检查状态
                     if (state != AudioRecord.STATE_INITIALIZED) {
                         throw IllegalStateException("AudioRecord初始化失败")
+                    }
+                    try {
+                        val audioEffects = WebRtcAudioEffects.create()
+                        audioEffects.setAEC(true)
+                        audioEffects.setNS(true)
+                        Log.d("AudioEffects", "WebRTC音频效果已启用")
+                    } catch (e: Exception) {
+                        Log.w("AudioEffects", "无法启用WebRTC音频效果: ${e.message}")
                     }
                 }
                 needsReinitialization = false
