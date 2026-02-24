@@ -253,10 +253,7 @@ open class BaseMegaphoneService {
                 return
             }
 
-            var audioSource = MediaRecorder.AudioSource.MIC //来源
-            if (platform == VehiclePlatform.H30) {
-                audioSource = MediaRecorder.AudioSource.MIC //来源
-            }
+            val audioSource = MediaRecorder.AudioSource.VOICE_COMMUNICATION //来源
             val rate = 8000 //采样频率
             val track = AudioFormat.CHANNEL_IN_MONO //声道
             val audioFormat = AudioFormat.ENCODING_PCM_16BIT //格式
