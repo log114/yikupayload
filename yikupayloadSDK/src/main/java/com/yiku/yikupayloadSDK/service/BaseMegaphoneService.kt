@@ -45,16 +45,15 @@ import kotlin.concurrent.thread
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import com.alibaba.fastjson.JSONObject
+import com.yiku.yikupayloadSDK.util.AdaptiveGainController
+import com.yiku.yikupayloadSDK.util.HardwareNoiseSuppressor
 import com.yiku.yikupayloadSDK.util.ProgressRequestBody
 import com.yiku.yikupayloadSDK.util.bytesToHex
 import okhttp3.FormBody
 import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
-
 import org.webrtc.voiceengine.WebRtcAudioEffects
-
-
 
 interface UploadFileCallback {
     fun onUploadPackageSuccess(totalNum: Int, finishNum: Int);
@@ -98,6 +97,9 @@ open class BaseMegaphoneService {
 
     private lateinit var servoControlOut: OutputStream
     private var servoControlClient: Socket? = null
+
+    val adaptiveGainController = AdaptiveGainController()// 软件降噪处理器
+
     open fun registMsgCallback(msgCallback: MsgCallback) {
         this.msgCallbacks += msgCallback
     }
@@ -282,16 +284,54 @@ open class BaseMegaphoneService {
                     if (state != AudioRecord.STATE_INITIALIZED) {
                         throw IllegalStateException("AudioRecord初始化失败")
                     }
+                }
+                // ===== 多级降噪方案 =====
+
+                // 1. 启用硬件噪声抑制（如果可用）
+                val hardwareNoiseSuppressor = HardwareNoiseSuppressor(mAudioRecord!!.audioSessionId)
+                hardwareNoiseSuppressor.enable()
+
+                // 2. 启用WebRTC音频效果
+                try {
+                    val audioEffects = WebRtcAudioEffects.create()
+                    audioEffects.setAEC(true)  // 回声消除
+                    audioEffects.setNS(true)   // 噪声抑制
+                    audioEffects.enable(mAudioRecord!!.audioSessionId)
+                    Log.d(TAG, "WebRTC音频效果已启用")
+                } catch (e: Exception) {
+                    Log.w(TAG, "WebRTC音频效果不可用: ${e.message}")
+                }
+
+                // 3. 启用Android系统噪声抑制
+                if (android.media.audiofx.NoiseSuppressor.isAvailable()) {
                     try {
-                        val audioEffects = WebRtcAudioEffects.create()
-                        audioEffects.setAEC(true)
-                        audioEffects.setNS(true)
-                        Log.d("AudioEffects", "WebRTC音频效果已启用")
+                        val ns = android.media.audiofx.NoiseSuppressor.create(
+                            mAudioRecord!!.audioSessionId
+                        )
+                        ns.enabled = true
+                        Log.d(TAG, "Android硬件噪声抑制已启用")
                     } catch (e: Exception) {
-                        Log.w("AudioEffects", "无法启用WebRTC音频效果: ${e.message}")
+                        Log.w(TAG, "启用硬件噪声抑制失败")
                     }
                 }
+
+                // 4. 启用Android系统自动增益控制
+                if (android.media.audiofx.AutomaticGainControl.isAvailable()) {
+                    try {
+                        val agc = android.media.audiofx.AutomaticGainControl.create(
+                            mAudioRecord!!.audioSessionId
+                        )
+                        agc.enabled = true
+                        Log.d(TAG, "Android自动增益控制已启用")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "启用自动增益控制失败")
+                    }
+                }
+
                 needsReinitialization = false
+
+                // 5. 添加初始静音（避免啸叫的关键）
+                Thread.sleep(100)  // 等待100ms，让硬件稳定
                 mAudioRecord!!.startRecording()
             }
 
@@ -308,11 +348,22 @@ open class BaseMegaphoneService {
                     while (isRecording && !Thread.interrupted()) {
                         val read = mAudioRecord!!.read(data, 0, bufferSize)
                         val ret = ByteArray(bufferSize / 8)
-                        val rc = opusUtils.encode(
-                            createEncoder, Uilts.byteArrayToShortArray(data), 0, ret
-                        )
                         var sendData = REAL_TIME_SHOUT.toByteArray()
                         if (AudioRecord.ERROR_INVALID_OPERATION != read) {
+                            // 转换为short数组
+                            var shortData = Uilts.byteArrayToShortArray(data)
+
+                            // ===== 应用多级处理 =====
+                            // 1. 自适应增益控制
+                            shortData = adaptiveGainController.processAudio(shortData)
+
+                            // 2. 可选：频谱噪声门限（CPU开销较大，按需启用）
+                            // if (enableSpectralNoiseGate) {
+                            //     shortData = spectralNoiseGate.processAudio(shortData)
+                            // }
+                            val rc = opusUtils.encode(
+                                createEncoder, shortData, 0, ret
+                            )
                             try {
                                 sendData += ret
                                 sendData2Payload(sendData)
@@ -342,7 +393,6 @@ open class BaseMegaphoneService {
     fun stopRealTimeShout() {
         synchronized(audioLock) {
             isRecording = false
-
             stopRecordingThread()
 
             // 发送停止标识，关闭喊话器的功放
