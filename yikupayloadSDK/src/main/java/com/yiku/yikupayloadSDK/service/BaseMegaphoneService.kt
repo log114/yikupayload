@@ -56,8 +56,6 @@ import okhttp3.FormBody
 import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
-import org.webrtc.voiceengine.WebRtcAudioEffects
-import org.webrtc.voiceengine.WebRtcAudioUtils
 
 interface UploadFileCallback {
     fun onUploadPackageSuccess(totalNum: Int, finishNum: Int);
