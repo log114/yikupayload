@@ -8,6 +8,8 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.AutomaticGainControl
+import android.media.audiofx.NoiseSuppressor
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
@@ -100,6 +102,10 @@ open class BaseMegaphoneService {
     private lateinit var servoControlOut: OutputStream
     private var servoControlClient: Socket? = null
 
+    var acousticEchoCanceler: AcousticEchoCanceler? = null
+    var hardwareNoiseSuppressor: HardwareNoiseSuppressor? = null
+    var noiseSuppressor: NoiseSuppressor? = null
+    var automaticGainControl: AutomaticGainControl? = null
     val adaptiveGainController = AdaptiveGainController()// 软件降噪处理器
 
     open fun registMsgCallback(msgCallback: MsgCallback) {
@@ -290,22 +296,22 @@ open class BaseMegaphoneService {
                 // ===== 多级降噪方案 =====
                 // 1. 设置回音消除
                 if (AcousticEchoCanceler.isAvailable()) {
-                    val acousticEchoCanceler = AcousticEchoCanceler.create(mAudioRecord!!.audioSessionId)
+                    acousticEchoCanceler = AcousticEchoCanceler.create(mAudioRecord!!.audioSessionId)
                     acousticEchoCanceler?.enabled = true
                     Log.d(TAG, "回音消除(AEC)已启用: ${acousticEchoCanceler?.enabled}")
                 }
 
                 // 2. 启用硬件噪声抑制（如果可用）
-                val hardwareNoiseSuppressor = HardwareNoiseSuppressor(mAudioRecord!!.audioSessionId)
-                hardwareNoiseSuppressor.enable()
+                hardwareNoiseSuppressor = HardwareNoiseSuppressor(mAudioRecord!!.audioSessionId)
+                hardwareNoiseSuppressor?.enable()
 
                 // 3. 启用Android系统噪声抑制
-                if (android.media.audiofx.NoiseSuppressor.isAvailable()) {
+                if (NoiseSuppressor.isAvailable()) {
                     try {
-                        val ns = android.media.audiofx.NoiseSuppressor.create(
+                        noiseSuppressor = NoiseSuppressor.create(
                             mAudioRecord!!.audioSessionId
                         )
-                        ns.enabled = true
+                        noiseSuppressor?.enabled = true
                         Log.d(TAG, "Android硬件噪声抑制已启用")
                     } catch (e: Exception) {
                         Log.w(TAG, "启用硬件噪声抑制失败")
@@ -313,12 +319,12 @@ open class BaseMegaphoneService {
                 }
 
                 // 4. 启用Android系统自动增益控制
-                if (android.media.audiofx.AutomaticGainControl.isAvailable()) {
+                if (AutomaticGainControl.isAvailable()) {
                     try {
-                        val agc = android.media.audiofx.AutomaticGainControl.create(
+                        automaticGainControl = AutomaticGainControl.create(
                             mAudioRecord!!.audioSessionId
                         )
-                        agc.enabled = true
+                        automaticGainControl?.enabled = true
                         Log.d(TAG, "Android自动增益控制已启用")
                     } catch (e: Exception) {
                         Log.w(TAG, "启用自动增益控制失败")
@@ -342,36 +348,39 @@ open class BaseMegaphoneService {
                 val opusUtils = OpusUtils.getInstant()
                 recordingThread = thread {
                     val createEncoder = opusUtils.createEncoder(rate, 1, 1)
-                    while (isRecording && !Thread.interrupted()) {
-                        val read = mAudioRecord!!.read(data, 0, bufferSize)
-                        val ret = ByteArray(bufferSize / 8)
-                        var sendData = REAL_TIME_SHOUT.toByteArray()
-                        if (AudioRecord.ERROR_INVALID_OPERATION != read) {
-                            // 转换为short数组
-                            var shortData = Uilts.byteArrayToShortArray(data)
+                    try {
+                        while (isRecording && !Thread.interrupted()) {
+                            val read = mAudioRecord!!.read(data, 0, bufferSize)
+                            val ret = ByteArray(bufferSize / 8)
+                            var sendData = REAL_TIME_SHOUT.toByteArray()
+                            if (AudioRecord.ERROR_INVALID_OPERATION != read) {
+                                // 转换为short数组
+                                var shortData = Uilts.byteArrayToShortArray(data)
 
-                            // ===== 应用多级处理 =====
-                            // 1. 自适应增益控制
-                            shortData = adaptiveGainController.processAudio(shortData)
+                                // ===== 应用多级处理 =====
+                                // 1. 自适应增益控制
+                                shortData = adaptiveGainController.processAudio(shortData)
 
-                            val rc = opusUtils.encode(
-                                createEncoder, shortData, 0, ret
-                            )
+                                val rc = opusUtils.encode(
+                                    createEncoder, shortData, 0, ret
+                                )
+                                try {
+                                    sendData += ret
+                                    sendData2Payload(sendData)
+                                } catch (e: IOException) {
+                                    e.printStackTrace()
+                                }
+                            }
                             try {
-                                sendData += ret
-                                sendData2Payload(sendData)
-                            } catch (e: IOException) {
-                                e.printStackTrace()
+                                Thread.sleep(10) // 添加异常捕获
+                            } catch (e: InterruptedException) {
+                                Log.w(TAG, "录音线程睡眠被中断，正常退出")
+                                break // 跳出循环
                             }
                         }
-                        try {
-                            Thread.sleep(10) // 添加异常捕获
-                        } catch (e: InterruptedException) {
-                            Log.w(TAG, "录音线程睡眠被中断，正常退出")
-                            break // 跳出循环
-                        }
+                    } finally {
+                        opusUtils.destroyEncoder(createEncoder) // 线程退出时释放编码器
                     }
-                    opusUtils.destroyEncoder(createEncoder)  // 线程退出时释放编码器
                 }
             } catch (e: IllegalStateException) {
                 // 标记需要重新初始化
@@ -415,6 +424,15 @@ open class BaseMegaphoneService {
 
                 // 停止录音线程
                 stopRecordingThread()
+
+                acousticEchoCanceler?.release()
+                acousticEchoCanceler = null
+                hardwareNoiseSuppressor?.release()
+                hardwareNoiseSuppressor = null
+                noiseSuppressor?.release()
+                noiseSuppressor = null
+                automaticGainControl?.release()
+                automaticGainControl = null
 
                 // 释放AudioRecord
                 if (mAudioRecord != null) {
