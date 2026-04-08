@@ -52,6 +52,7 @@ import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
+import java.util.concurrent.TimeUnit
 
 
 interface UploadFileCallback {
@@ -77,7 +78,13 @@ open class BaseMegaphoneService {
     var mAudioRecord: AudioRecord? = null
     var isPlayAlarm = false
     var getAudioFilesCallback: GetAudioFilesCallback? = null
-    private val client = OkHttpClient()
+    private val client: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)  // 连接超时：30秒
+            .readTimeout(60, TimeUnit.SECONDS)      // 读取超时：300秒（5分钟）
+            .writeTimeout(300, TimeUnit.SECONDS)     // 写入超时：300秒（5分钟）
+            .build()
+    }
     private var host = ""
     private var needsReinitialization = false
 
