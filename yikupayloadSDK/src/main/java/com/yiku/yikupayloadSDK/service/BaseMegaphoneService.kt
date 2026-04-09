@@ -47,12 +47,15 @@ import okhttp3.Request
 import com.alibaba.fastjson.JSONObject
 import com.yiku.yikupayloadSDK.util.ProgressRequestBody
 import com.yiku.yikupayloadSDK.util.bytesToHex
+import okhttp3.ConnectionPool
 import okhttp3.FormBody
 import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
+import okhttp3.Protocol
 import okhttp3.RequestBody
 import java.util.concurrent.TimeUnit
+import javax.net.SocketFactory
 
 
 interface UploadFileCallback {
@@ -79,11 +82,41 @@ open class BaseMegaphoneService {
     var isPlayAlarm = false
     var getAudioFilesCallback: GetAudioFilesCallback? = null
     private val client: OkHttpClient by lazy {
-        OkHttpClient.Builder()
+        val builder = OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)  // 连接超时：30秒
-            .readTimeout(60, TimeUnit.SECONDS)      // 读取超时：300秒（5分钟）
+            .readTimeout(60, TimeUnit.SECONDS)      // 读取超时：60秒（1分钟）
             .writeTimeout(300, TimeUnit.SECONDS)     // 写入超时：300秒（5分钟）
-            .build()
+
+        // Android 13 特别优化
+        if (Build.VERSION.SDK_INT >= 33) {
+            // 强制使用 HTTP/1.1，兼容性更好
+            builder.protocols(listOf(Protocol.HTTP_1_1))
+
+            // 增加缓冲区大小
+            val socketFactory = SocketFactory.getDefault() as SocketFactory
+            builder.socketFactory(socketFactory)
+
+            // 禁用连接池，避免复用问题
+            builder.connectionPool(ConnectionPool(0, 5, TimeUnit.MINUTES))
+
+            // 禁用 HTTP/2
+            builder.protocols(listOf(Protocol.HTTP_1_1))
+
+            // 添加网络优化拦截器
+            builder.addInterceptor { chain ->
+                val request = chain.request().newBuilder()
+                    .header("Connection", "keep-alive")
+                    .header("Keep-Alive", "timeout=300")
+                    .removeHeader("Accept-Encoding")  // 禁用Gzip压缩，避免CPU开销
+                    .build()
+                chain.proceed(request)
+            }
+
+            // 设置更大的缓冲区
+            builder.retryOnConnectionFailure(true)
+        }
+
+        builder.build()
     }
     private var host = ""
     private var needsReinitialization = false
