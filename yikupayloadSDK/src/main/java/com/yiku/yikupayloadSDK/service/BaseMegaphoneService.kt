@@ -88,7 +88,7 @@ open class BaseMegaphoneService {
             .writeTimeout(300, TimeUnit.SECONDS)     // 写入超时：300秒（5分钟）
 
         // Android 13 特别优化
-        if (Build.VERSION.SDK_INT >= 33) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             // 强制使用 HTTP/1.1，兼容性更好
             builder.protocols(listOf(Protocol.HTTP_1_1))
 
