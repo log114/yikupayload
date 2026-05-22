@@ -50,4 +50,6 @@ const val START_RADIO = "[40]"
 const val STOP_RADIO = "[41]"
 const val DISABLE_RADIO = "[45]"
 const val RESTART_RADIO = "[46]"
+// 文字转语音语速控制，0-100，默认50
+const val TTS_SPEECH_RATE = "[50]"
 const val REBOOT = "[88]"

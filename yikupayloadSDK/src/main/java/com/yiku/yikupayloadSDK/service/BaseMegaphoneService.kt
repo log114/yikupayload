@@ -45,6 +45,7 @@ import kotlin.concurrent.thread
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import com.alibaba.fastjson.JSONObject
+import com.yiku.yikupayloadSDK.protocol.TTS_SPEECH_RATE
 import com.yiku.yikupayloadSDK.util.ProgressRequestBody
 import com.yiku.yikupayloadSDK.util.bytesToHex
 import okhttp3.FormBody
@@ -248,6 +249,13 @@ open class BaseMegaphoneService {
     }
     fun restartRadio() {
         val sendData = RESTART_RADIO.toByteArray()
+        sendData2Payload(sendData)
+    }
+
+    // 设置tts播放语速
+    fun setTtsSpeechRate(speechRate: Int) {
+        var sendData = TTS_SPEECH_RATE.toByteArray()
+        sendData += speechRate.toString().toByteArray()
         sendData2Payload(sendData)
     }
 
