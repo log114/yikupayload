@@ -1,5 +1,6 @@
 package com.yiku.yikupayloadSDK.util
 
+import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.experimental.and
@@ -19,5 +20,17 @@ object Uilts {
             dest[i * 2 + 1] = ((shortArray[i] and 0xFFFF.toShort()).toLong() shr 8).toByte()
         }
         return dest
+    }
+
+    fun File.normalizeExtensionToLowerCase(): String {
+        val name = this.name
+        val dotIndex = name.lastIndexOf('.')
+        return if (dotIndex > 0 && dotIndex < name.length - 1) {
+            val baseName = name.substring(0, dotIndex)
+            val ext = name.substring(dotIndex + 1)
+            "$baseName.${ext.lowercase()}"
+        } else {
+            name
+        }
     }
 }

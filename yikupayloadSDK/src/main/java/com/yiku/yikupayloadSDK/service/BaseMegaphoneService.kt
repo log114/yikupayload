@@ -47,6 +47,7 @@ import okhttp3.Request
 import com.alibaba.fastjson.JSONObject
 import com.yiku.yikupayloadSDK.protocol.TTS_SPEECH_RATE
 import com.yiku.yikupayloadSDK.util.ProgressRequestBody
+import com.yiku.yikupayloadSDK.util.Uilts.normalizeExtensionToLowerCase
 import com.yiku.yikupayloadSDK.util.bytesToHex
 import okhttp3.FormBody
 import okhttp3.MediaType
@@ -648,12 +649,13 @@ open class BaseMegaphoneService {
 //            val body = RequestBody.create(MEDIA_TYPE_MARKDOWN, file)
 //            // 参数分别为， 请求key ，文件名称 ， RequestBody
 //            requestBody.addFormDataPart("file", file.name, body)
-
+            // 强制将文件后缀名改为小写
+            val normalizedFileName = file.normalizeExtensionToLowerCase()
             // 🔥 关键修改：使用您的 ProgressRequestBody 而不是默认的 RequestBody
             val body = ProgressRequestBody(MEDIA_TYPE_MARKDOWN!!, file, callback)
 
             // 参数分别为：请求key，文件名称，RequestBody
-            requestBody.addFormDataPart("file", file.name, body)
+            requestBody.addFormDataPart("file", normalizedFileName, body)
         }
         val request =
             Request.Builder()
