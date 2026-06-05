@@ -140,11 +140,15 @@ class WaterGunService {
         sendData2Payload(msg.getMsg())
     }
 
-    /* 操作水枪喷头切换 */
-    fun nozzleSwitch() {
+    /* 操作水枪喷头切换
+    * nozzleType=0，切换到清水喷头
+    * nozzleType=1，切换到泡沫喷头
+    *  */
+    fun nozzleSwitch(nozzleType: Int) {
         val msg = Msg();
         msg.msgId = WATERGUN_NOZZLESWITCH.toByte()
         msg.payload = ByteArray(4)
+        msg.payload[0] = nozzleType.toByte()
         sendData2Payload(msg.getMsg())
     }
 
