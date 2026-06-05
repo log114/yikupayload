@@ -139,6 +139,14 @@ class WaterGunService {
         sendData2Payload(msg.getMsg())
     }
 
+    /* 操作水枪喷头切换 */
+    fun nozzleSwitch() {
+        val msg = Msg();
+        msg.msgId = WATERGUN_MODESWITCH.toByte()
+        msg.payload = ByteArray(4)
+        sendData2Payload(msg.getMsg())
+    }
+
     // 发送心跳包
     fun heartbeat() {
         val msg = Msg();
