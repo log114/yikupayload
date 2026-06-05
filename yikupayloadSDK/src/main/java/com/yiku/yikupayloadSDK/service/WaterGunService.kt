@@ -2,6 +2,7 @@ package com.yiku.yikupayloadSDK.service
 
 import android.util.Log
 import com.yiku.yikupayloadSDK.protocol.WATERGUN_MODESWITCH
+import com.yiku.yikupayloadSDK.protocol.WATERGUN_NOZZLESWITCH
 import com.yiku.yikupayloadSDK.protocol.WATERGUN_STATE_SEND
 import com.yiku.yikupayloadSDK.protocol.WATERGUN_TOLEFT
 import com.yiku.yikupayloadSDK.protocol.WATERGUN_TORIGHT
@@ -142,7 +143,7 @@ class WaterGunService {
     /* 操作水枪喷头切换 */
     fun nozzleSwitch() {
         val msg = Msg();
-        msg.msgId = WATERGUN_MODESWITCH.toByte()
+        msg.msgId = WATERGUN_NOZZLESWITCH.toByte()
         msg.payload = ByteArray(4)
         sendData2Payload(msg.getMsg())
     }
