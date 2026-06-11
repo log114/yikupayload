@@ -33,6 +33,12 @@ open class EmitterService {
     open fun registMsgCallback(msgCallback: MsgCallback) {
         this.msgCallbacks += msgCallback
     }
+    open fun disConnect() {
+        if(getIsConnected()) {
+            isConnected = false
+            client.close()
+        }
+    }
 
     var parseIndex = 0;
     var recvData = ByteArray(128)

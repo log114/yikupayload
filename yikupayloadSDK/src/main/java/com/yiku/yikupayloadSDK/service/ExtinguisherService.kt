@@ -13,7 +13,7 @@ import java.net.Socket
 import java.util.ArrayList
 import kotlin.concurrent.thread
 
-class ExtinguisherService {
+open class ExtinguisherService {
     private val TAG = "ExtinguisherService"
     var msgCallbacks: List<MsgCallback> = ArrayList()
 
