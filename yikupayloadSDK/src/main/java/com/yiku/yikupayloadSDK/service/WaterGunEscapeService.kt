@@ -1,12 +1,11 @@
 package com.yiku.yikupayloadSDK.service
 
 import android.util.Log
-import com.yiku.yikupayloadSDK.protocol.WATERBRANCH_HOSE_DETACHMENT
-import com.yiku.yikupayloadSDK.protocol.WATERBRANCH_HOSE_RELEASE
-import com.yiku.yikupayloadSDK.protocol.WATERBRANCH_STATE_SEND
+import com.yiku.yikupayloadSDK.protocol.WATERGUNESCAPE_HOSE_DETACHMENT
+import com.yiku.yikupayloadSDK.protocol.WATERGUNESCAPE_STATE_SEND
 import com.yiku.yikupayloadSDK.util.Msg
 import com.yiku.yikupayloadSDK.util.MsgCallback
-import com.yiku.yikupayloadSDK.util.WaterBranchHost
+import com.yiku.yikupayloadSDK.util.WaterGunEscapeHost
 import com.yiku.yikupayloadSDK.util.bytesToHex
 import java.io.InputStream
 import java.io.OutputStream
@@ -14,8 +13,8 @@ import java.net.Socket
 import java.util.ArrayList
 import kotlin.concurrent.thread
 
-open class WaterBranchService {
-    private val TAG = "WaterBranchService"
+open class WaterGunEscapeService {
+    private val TAG = "WaterGunEscapeService"
     var msgCallbacks: List<MsgCallback> = ArrayList()
 
     private val port = 8519
@@ -48,14 +47,14 @@ open class WaterBranchService {
 
     open fun connect(): Boolean {
         if(host == ""){
-            host = WaterBranchHost
+            host = WaterGunEscapeHost
         }
         //开启一个链接，需要指定地址和端口
         return try {
-            Log.i(TAG, "消防水枪连接：$host")
+            Log.i(TAG, "40水枪脱离 连接：$host")
             client = Socket(host, port)
             out = client.getOutputStream()
-            Log.i(TAG, "消防水枪连接成功")
+            Log.i(TAG, "40水枪脱离 连接成功")
             isConnected = true
             inputStream = client.getInputStream()
             thread {
@@ -73,7 +72,7 @@ open class WaterBranchService {
                         }
                     }
                 } catch (e: Exception) {
-                    Log.i(TAG, "消防水枪信息获取失败：$e")
+                    Log.i(TAG, "40水枪脱离 信息获取失败：$e")
                     e.printStackTrace()
                 }
             }
@@ -91,37 +90,26 @@ open class WaterBranchService {
     open fun sendData2Payload(data: ByteArray) {
         thread {
             try {
-                Log.i(TAG, "水枪，sendData:${bytesToHex(data)}")
+                Log.i(TAG, "40水枪脱离，sendData:${bytesToHex(data)}")
                 //向输出流中写入数据，传向服务端
                 if (!getIsConnected()) {
                     return@thread
                 }
 //                Log.i(TAG, "sendData:${data.asList()}")
-                Log.i(TAG, "sendData:${bytesToHex(data)}")
                 out?.write(data)
             } catch (e: Exception) {
                 e.printStackTrace()
-                Log.e(TAG, "水枪消息发送异常：$e")
-//                sendData2Payload(data)
+                Log.e(TAG, "40水枪脱离 消息发送异常：$e")
                 isConnected = false
                 client.close()
             }
         }
     }
 
-    // 释放水带，0关，1开
-    fun hoseRelease(operateType: Int) {
-        val msg = Msg();
-        msg.msgId = WATERBRANCH_HOSE_RELEASE.toByte()
-        msg.payload = ByteArray(4)
-        msg.payload[0] = operateType.toByte()
-        sendData2Payload(msg.getMsg())
-    }
-
     // 水带脱困，1：开始脱困，0：停止脱困（复位）
     fun hoseDetachment(operateType: Int) {
         val msg = Msg();
-        msg.msgId = WATERBRANCH_HOSE_DETACHMENT.toByte()
+        msg.msgId = WATERGUNESCAPE_HOSE_DETACHMENT.toByte()
         msg.payload = ByteArray(4)
         msg.payload[0] = operateType.toByte()
         sendData2Payload(msg.getMsg())
@@ -130,7 +118,7 @@ open class WaterBranchService {
     // 发送心跳包
     fun heartbeat() {
         val msg = Msg();
-        msg.msgId = WATERBRANCH_STATE_SEND.toByte()
+        msg.msgId = WATERGUNESCAPE_STATE_SEND.toByte()
         msg.payload = ByteArray(4)
         sendData2Payload(msg.getMsg())
     }

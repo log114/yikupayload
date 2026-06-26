@@ -18,3 +18,4 @@ const val PLLightHost = "192.168.144.36"// 品灵探照灯
 const val AllInOneHost = "192.168.144.37"// 多合一(照明、红蓝、喊话、抛投、摄像头)
 const val FourInOne2Host = "192.168.144.38"// 四合一-二代(照明、喊话、收音、红蓝)
 const val SlowDescentDevice200Host = "192.168.144.39"// 200gk缓降器
+const val WaterGunEscapeHost = "192.168.144.40"// 40水枪脱离
