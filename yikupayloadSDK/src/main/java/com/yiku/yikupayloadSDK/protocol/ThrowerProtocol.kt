@@ -21,3 +21,7 @@ const val THROWER_CONTROL_TWO_LEFT = 0x29 // 双舵机动作控制(左侧俩1/2)
 const val THROWER_CONTROL_TWO_RIGHT = 0x2A // 双舵机动作控制(右侧俩7/8)，4字节，分别是 关闭/开启（0/1）、空、空、空
 const val THROWER_CHARGING_AND_ALLOW = 0x31 // 充电放电和允许起爆一起，4字节，分别是 弹号（1-4）、状态（0/1）、空、空
 
+const val THROWER_CALIBRATION_1 = 0x2C // 重量标定1
+const val THROWER_CALIBRATION_2 = 0x2D // 重量标定2
+const val THROWER_PEEL = 0x2F // 去皮
+

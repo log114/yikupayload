@@ -2,6 +2,8 @@ package com.yiku.yikupayloadSDK.service
 
 import android.util.Log
 import com.yiku.yikupayloadSDK.protocol.THROWER_ALLOW_DETONATION
+import com.yiku.yikupayloadSDK.protocol.THROWER_CALIBRATION_1
+import com.yiku.yikupayloadSDK.protocol.THROWER_CALIBRATION_2
 import com.yiku.yikupayloadSDK.protocol.THROWER_CHARGING
 import com.yiku.yikupayloadSDK.protocol.THROWER_CHARGING_AND_ALLOW
 import com.yiku.yikupayloadSDK.protocol.THROWER_CONNECT_TEST
@@ -11,6 +13,7 @@ import com.yiku.yikupayloadSDK.protocol.THROWER_CONTROL_TWO_CENTER
 import com.yiku.yikupayloadSDK.protocol.THROWER_CONTROL_TWO_LEFT
 import com.yiku.yikupayloadSDK.protocol.THROWER_CONTROL_TWO_RIGHT
 import com.yiku.yikupayloadSDK.protocol.THROWER_DETONATE_HEIGHT
+import com.yiku.yikupayloadSDK.protocol.THROWER_PEEL
 import com.yiku.yikupayloadSDK.protocol.THROWER_UPDATE
 import com.yiku.yikupayloadSDK.util.Msg
 import com.yiku.yikupayloadSDK.util.MsgCallback
@@ -338,5 +341,32 @@ class ThrowerService {
         msg.msgId = THROWER_UPDATE.toByte()
         msg.payload = ByteArray(4)
         sendData2Payload(msg.getMsg())
+    }
+
+    // 标定
+    fun weightCalibration(index: Int, weight: Int) {
+        val msg = Msg()
+        msg.msgId = if(index == 1) {
+            THROWER_CALIBRATION_1.toByte()
+        }else {
+            THROWER_CALIBRATION_2.toByte()
+        }
+        msg.payload = weight.toLittleEndianBytes()
+        sendData2Payload(msg.getMsg())
+    }
+
+    // 去皮
+    fun weightPeel() {
+        val msg = Msg()
+        msg.msgId = THROWER_PEEL.toByte()
+        msg.payload = ByteArray(2)
+        sendData2Payload(msg.getMsg())
+    }
+
+    fun Int.toLittleEndianBytes(): ByteArray {
+        return byteArrayOf(
+            (this and 0xFF).toByte(),          // 低8位
+            ((this shr 8) and 0xFF).toByte()   // 高8位
+        )
     }
 }
