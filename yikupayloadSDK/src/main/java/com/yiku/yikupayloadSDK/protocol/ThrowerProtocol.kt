@@ -23,5 +23,6 @@ const val THROWER_CHARGING_AND_ALLOW = 0x31 // 充电放电和允许起爆一起
 
 const val THROWER_CALIBRATION_1 = 0x2C // 重量标定1
 const val THROWER_CALIBRATION_2 = 0x2D // 重量标定2
+const val THROWER_FACTORY_RESET = 0x2E // 恢复出厂设置
 const val THROWER_PEEL = 0x2F // 去皮
 

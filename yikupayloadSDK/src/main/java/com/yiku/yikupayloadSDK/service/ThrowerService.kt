@@ -13,6 +13,7 @@ import com.yiku.yikupayloadSDK.protocol.THROWER_CONTROL_TWO_CENTER
 import com.yiku.yikupayloadSDK.protocol.THROWER_CONTROL_TWO_LEFT
 import com.yiku.yikupayloadSDK.protocol.THROWER_CONTROL_TWO_RIGHT
 import com.yiku.yikupayloadSDK.protocol.THROWER_DETONATE_HEIGHT
+import com.yiku.yikupayloadSDK.protocol.THROWER_FACTORY_RESET
 import com.yiku.yikupayloadSDK.protocol.THROWER_PEEL
 import com.yiku.yikupayloadSDK.protocol.THROWER_UPDATE
 import com.yiku.yikupayloadSDK.util.Msg
@@ -352,6 +353,14 @@ class ThrowerService {
             THROWER_CALIBRATION_2.toByte()
         }
         msg.payload = weight.toLittleEndianBytes()
+        sendData2Payload(msg.getMsg())
+    }
+
+    // 恢复出厂设置
+    fun factoryReset() {
+        val msg = Msg()
+        msg.msgId = THROWER_FACTORY_RESET.toByte()
+        msg.payload = ByteArray(2)
         sendData2Payload(msg.getMsg())
     }
 
