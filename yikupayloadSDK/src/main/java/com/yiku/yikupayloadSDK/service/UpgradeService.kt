@@ -20,7 +20,7 @@ import kotlin.collections.plus
 import kotlin.concurrent.thread
 
 class UpgradeService {
-    private val TAG = "upgradeService"
+    private val TAG = "UpgradeService"
 
     var msgCallbacks: List<MsgCallback> = ArrayList()
 
