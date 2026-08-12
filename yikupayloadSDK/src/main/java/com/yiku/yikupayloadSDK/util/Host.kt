@@ -1,5 +1,7 @@
 package com.yiku.yikupayloadSDK.util
 
+import com.yiku.yikupayloadSDK.service.CargoBoxService
+
 
 const val ShoutHost = "192.168.144.23"
 const val LightHost = "192.168.144.24"// 灯
@@ -19,3 +21,4 @@ const val AllInOneHost = "192.168.144.37"// 多合一(照明、红蓝、喊话�
 const val FourInOne2Host = "192.168.144.38"// 四合一-二代(照明、喊话、收音、红蓝)
 const val SlowDescentDevice200Host = "192.168.144.39"// 200gk缓降器
 const val WaterGunEscapeHost = "192.168.144.40"// 40水枪脱离
+const val CargoBoxHost = "192.168.144.42"// 运输箱
