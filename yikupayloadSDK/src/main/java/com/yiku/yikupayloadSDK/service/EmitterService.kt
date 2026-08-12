@@ -19,7 +19,7 @@ open class EmitterService {
     private val TAG = "EmitterService"
     var msgCallbacks: List<MsgCallback> = ArrayList()
 
-    private val port = 8519
+    private var port = 8519
     private lateinit var client: Socket
     private var out: OutputStream? = null
     private var inputStream: InputStream? = null
@@ -89,6 +89,9 @@ open class EmitterService {
     }
     open fun getIp(): String {
         return host
+    }
+    open fun setPort(newPort: Int) {
+        port = newPort
     }
 
     open fun connect(): Boolean {
