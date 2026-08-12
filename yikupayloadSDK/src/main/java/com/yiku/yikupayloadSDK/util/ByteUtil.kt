@@ -21,8 +21,8 @@ fun bytesToHex(bytes: ByteArray): String {
 // 小端序，Int转ByteArray
 fun int16ToByteArrayLE(i: Int): ByteArray {
     val arr = ByteArray(2)
-    arr[0] = (i and 0xff).toByte()      // 低字节在前
-    arr[1] = (i shl 8).toByte()         // 高字节在后
+    arr[0] = (i and 0xff).toByte()       // 低字节
+    arr[1] = ((i shr 8) and 0xff).toByte() // 高字节
     return arr
 }
 
