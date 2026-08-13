@@ -1,11 +1,17 @@
 package com.yiku.yikupayloadSDK.util
 
-// 大端序，int转ByteArray
+// 大端序，Int转ByteArray
 fun int16ToByteArray(i: Int): ByteArray {
     val arr = ByteArray(2)
-    arr[0] = (i shl 8).toByte()
-    arr[1] = (i and 0xff).toByte()
+    arr[0] = ((i shr 8) and 0xFF).toByte()  // 高字节
+    arr[1] = (i and 0xFF).toByte()          // 低字节
     return arr
+}
+
+// 大端序，ByteArray转Int
+fun byteArrayToInt16(arr: ByteArray): Int {
+    if (arr.size < 2) throw IllegalArgumentException("数组长度至少为2")
+    return ((arr[0].toInt() and 0xFF) shl 8) or (arr[1].toInt() and 0xFF)
 }
 
 fun bytesToHex(bytes: ByteArray): String {
