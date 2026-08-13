@@ -16,7 +16,7 @@ import java.util.ArrayList
 import kotlin.concurrent.thread
 
 open class CargoBoxService {
-    private val TAG = "WaterGunEscapeService"
+    private val TAG = "CargoBoxService"
     var msgCallbacks: List<MsgCallback> = ArrayList()
 
     private val port = 8519
@@ -95,7 +95,7 @@ open class CargoBoxService {
 
     open fun connect(): Boolean {
         if (host == "") {
-            host = ThrowerHost
+            host = CargoBoxHost
         }
         if (isConnected){
             return true
