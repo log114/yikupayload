@@ -46,6 +46,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import com.alibaba.fastjson.JSONObject
 import com.yiku.yikupayloadSDK.protocol.TTS_SPEECH_RATE
+import com.yiku.yikupayloadSDK.util.AecmProcessor
+import com.yiku.yikupayloadSDK.util.FarendProvider
 import com.yiku.yikupayloadSDK.util.ProgressRequestBody
 import com.yiku.yikupayloadSDK.util.Uilts.normalizeExtensionToLowerCase
 import com.yiku.yikupayloadSDK.util.bytesToHex
@@ -80,6 +82,8 @@ open class BaseMegaphoneService {
     var mAudioRecord: AudioRecord? = null
     var isPlayAlarm = false
     var getAudioFilesCallback: GetAudioFilesCallback? = null
+
+    private val farendProvider = FarendProvider()
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)  // 连接超时：30秒
@@ -260,6 +264,11 @@ open class BaseMegaphoneService {
         sendData2Payload(sendData)
     }
 
+    // 输入参考帧
+    open fun inputReferenceFrame(pcm16k: ShortArray) {
+        farendProvider.onBeforePlay(pcm16k)
+    }
+
     @RequiresPermission(value = "android.permission.RECORD_AUDIO")
     open fun startRealTimeShout(isDisableRadio: Boolean) {
         synchronized(audioLock) {
@@ -269,6 +278,8 @@ open class BaseMegaphoneService {
                 return
             }
 
+            // ★ 录音启动前清空参考帧队列（防止拿到旧帧）
+            farendProvider.clear()
             var audioSource = MediaRecorder.AudioSource.MIC //来源
             val rate = 8000 //采样频率
             val track = AudioFormat.CHANNEL_IN_MONO //声道
@@ -306,14 +317,51 @@ open class BaseMegaphoneService {
                 onRecordingReady?.invoke()
 
                 val opusUtils = OpusUtils.getInstant()
+
+                // ★ 创建 AECM 处理器（录音线程内创建，线程内释放）
+                val aecm = AecmProcessor(rate, 4)
+
                 recordingThread = thread {
                     val createEncoder = opusUtils.createEncoder(rate, 1, 1)
                     while (isRecording && !Thread.interrupted()) {
                         val read = mAudioRecord!!.read(data, 0, bufferSize)
+
+                        // ===== ★ AEC 处理开始 =====
+                        val nearShorts = Uilts.byteArrayToShortArray(data)  // 480 个 short
+                        val outShorts = ShortArray(480)
+
+                        // ★ 第一步：把队列里积累的远端帧全部喂给 AECM
+                        // 这样 AECM 内部 ring buffer 里有足够的历史数据
+                        var drained = 0
+                        while (true) {
+                            val farFrame = farendProvider.pollFarendFrame() ?: break
+                            aecm.bufferFarend(farFrame.pcm, 80)
+                            drained++
+                        }
+                        // 调试用
+                        if (drained > 0) {
+                            Log.v(TAG, "AECM drained $drained farend frames")
+                        }
+
+                        // ★ 第二步：逐帧 process
+                        for (i in 0 until 6) {
+                            val startIdx = i * 80
+                            val endIdx = startIdx + 80
+                            val nearFrame = nearShorts.copyOfRange(startIdx, endIdx)
+
+                            // ★ msInSndCardBuf 不再用动态 delayMs
+                            // 而是告诉 AECM：远端帧比近端帧早了多少
+                            // 这个值应该 ≈ 你的实际播放延迟（AudioTrack buffer + 声学）
+                            val aecFrame = aecm.process(nearFrame, 40)
+
+                            aecFrame.copyInto(outShorts, startIdx)
+                        }
+                        // ===== ★ AEC 处理结束 =====
+
+                        // ★ 对 AEC 处理后的 PCM 做 Opus 编码
                         val ret = ByteArray(bufferSize / 8)
-                        val rc = opusUtils.encode(
-                            createEncoder, Uilts.byteArrayToShortArray(data), 0, ret
-                        )
+                        val rc = opusUtils.encode(createEncoder, outShorts, 0, ret)
+
                         var sendData = REAL_TIME_SHOUT.toByteArray()
                         if (AudioRecord.ERROR_INVALID_OPERATION != read) {
                             try {
@@ -331,6 +379,7 @@ open class BaseMegaphoneService {
                         }
                     }
                     opusUtils.destroyEncoder(createEncoder)  // 线程退出时释放编码器
+                    aecm.release()  // ★ 释放 AECM
                 }
             } catch (e: IllegalStateException) {
                 // 标记需要重新初始化
@@ -612,6 +661,7 @@ open class BaseMegaphoneService {
     fun stopRadio() {
         val sendData = STOP_RADIO.toByteArray()
         sendData2Payload(sendData)
+        farendProvider.clear() // 停止收音时，清除参考帧
     }
 
     fun fetchFiles(): ArrayList<String>? {

@@ -6,6 +6,20 @@ import java.nio.ByteOrder
 import kotlin.experimental.and
 
 object Uilts {
+    /**
+     * 16kHz → 8kHz 简单降采样
+     * 每 2 个样本取 1 个（如需更高质量可先做抗混叠低通）
+     */
+    fun downsample16kTo8k(input: ShortArray): ShortArray {
+        val out = ShortArray(input.size / 2)
+        for (i in out.indices) {
+            // 简单平均，比单纯抽取效果更好
+            out[i] = ((input[i * 2].toInt() + input[i * 2 + 1].toInt()) / 2)
+                .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+                .toShort()
+        }
+        return out
+    }
     fun byteArrayToShortArray(byteArray: ByteArray): ShortArray {
         val shortArray = ShortArray(byteArray.size / 2)
         ByteBuffer.wrap(byteArray).order(ByteOrder.nativeOrder()).asShortBuffer().get(shortArray)
