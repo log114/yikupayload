@@ -47,6 +47,7 @@ import okhttp3.Request
 import com.alibaba.fastjson.JSONObject
 import com.yiku.yikupayloadSDK.protocol.TTS_SPEECH_RATE
 import com.yiku.yikupayloadSDK.util.AecmProcessor
+import com.yiku.yikupayloadSDK.util.DynamicDelayEstimator
 import com.yiku.yikupayloadSDK.util.FarendProvider
 import com.yiku.yikupayloadSDK.util.ProgressRequestBody
 import com.yiku.yikupayloadSDK.util.Uilts.normalizeExtensionToLowerCase
@@ -270,18 +271,25 @@ open class BaseMegaphoneService {
     }
 
     @RequiresPermission(value = "android.permission.RECORD_AUDIO")
-    open fun startRealTimeShout(isOpenAECM: Boolean = true, actualDelay: Int = 120) {
+    open fun startRealTimeShout(isOpenAECM: Boolean = true, initialDelay: Int = 120) {
         synchronized(audioLock) {
             // 检查是否已初始化并运行
             if (isRecording) {
                 Log.w(TAG, "已经在录音状态，忽略重复启动")
                 return
             }
+            // ★ 动态延迟估计器
+            val delayEstimator = DynamicDelayEstimator()
+            delayEstimator.updateDelay(initialDelay)  // 初始值
 
             // ★ 录音启动前清空参考帧队列（防止拿到旧帧）
             farendProvider.clear()
             // ★ actualDelay 是标定值（~120ms），aecmDelay 固定 20ms
             val aecmDelay = 20  // 传给 AECM msInSndCardBuf，必须 ≤ 32
+            var actualDelay = initialDelay
+            // ★ 探测计时
+            var lastEstimationTime = System.currentTimeMillis()
+            val ESTIMATION_INTERVAL = 2000L  // 每 2 秒检测一次PN，动态检测延迟
             val audioSource = MediaRecorder.AudioSource.MIC //来源
             val rate = 8000 //采样频率
             val track = AudioFormat.CHANNEL_IN_MONO //声道
@@ -327,17 +335,28 @@ open class BaseMegaphoneService {
                     val createEncoder = opusUtils.createEncoder(rate, 1, 1)
                     while (isRecording && !Thread.interrupted()) {
                         val read = mAudioRecord!!.read(data, 0, bufferSize)
+                        if (read <= 0) continue
 
                         // ===== ★ AEC 处理开始 =====
                         val nearShorts = Uilts.byteArrayToShortArray(data)  // 480 个 short
+
                         val outShorts = ShortArray(480)
-
                         if(isOpenAECM) {
-                            val currentTimeMs = System.currentTimeMillis()
+                            // ★ 喂给延迟估计器
+                            delayEstimator.feedNear(nearShorts)
 
+                            // ★ 定期执行延迟估计
+                            val now = System.currentTimeMillis()
+                            if (now - lastEstimationTime > ESTIMATION_INTERVAL) {
+                                val est = delayEstimator.estimateOnce()
+                                delayEstimator.updateDelay(est)
+                                actualDelay = delayEstimator.getDelay()
+                                lastEstimationTime = now
+                                Log.d(TAG, "计算延迟：$est，应用延迟：$actualDelay")
+                            }
                             // ★ 关键：计算回声对应的远端播放时间
                             // 当前录到的声音，是 actualDelay ms 前播放的
-                            val echoOriginTime = currentTimeMs - actualDelay
+                            val echoOriginTime = now - actualDelay
 
                             // ★ 从队列取"时间对齐"的远端帧
                             val alignedFrames = farendProvider.pollAlignedFrames(echoOriginTime)
