@@ -270,7 +270,7 @@ open class BaseMegaphoneService {
     }
 
     @RequiresPermission(value = "android.permission.RECORD_AUDIO")
-    open fun startRealTimeShout(isOpenAECM: Boolean = true, delay: Int =200) {
+    open fun startRealTimeShout(isOpenAECM: Boolean = true, actualDelay: Int = 120) {
         synchronized(audioLock) {
             // 检查是否已初始化并运行
             if (isRecording) {
@@ -280,6 +280,8 @@ open class BaseMegaphoneService {
 
             // ★ 录音启动前清空参考帧队列（防止拿到旧帧）
             farendProvider.clear()
+            // ★ actualDelay 是标定值（~120ms），aecmDelay 固定 20ms
+            val aecmDelay = 20  // 传给 AECM msInSndCardBuf，必须 ≤ 32
             val audioSource = MediaRecorder.AudioSource.MIC //来源
             val rate = 8000 //采样频率
             val track = AudioFormat.CHANNEL_IN_MONO //声道
@@ -331,33 +333,33 @@ open class BaseMegaphoneService {
                         val outShorts = ShortArray(480)
 
                         if(isOpenAECM) {
-                            // ★ 第一步：把队列里积累的远端帧全部喂给 AECM
-                            // 这样 AECM 内部 ring buffer 里有足够的历史数据
-                            var drained = 0
-                            while (true) {
-                                val farFrame = farendProvider.pollFarendFrame() ?: break
-                                aecm.bufferFarend(farFrame.pcm, 80)
-                                drained++
-                            }
-                            // 调试用
-                            if (drained > 0) {
-                                Log.v(TAG, "AECM drained $drained farend frames")
+                            val currentTimeMs = System.currentTimeMillis()
+
+                            // ★ 关键：计算回声对应的远端播放时间
+                            // 当前录到的声音，是 actualDelay ms 前播放的
+                            val echoOriginTime = currentTimeMs - actualDelay
+
+                            // ★ 从队列取"时间对齐"的远端帧
+                            val alignedFrames = farendProvider.pollAlignedFrames(echoOriginTime)
+
+                            // ★ 喂给 AECM（连续喂入）
+                            for (farFrame in alignedFrames) {
+                                aecm.bufferFarend(farFrame, 80)
                             }
 
-                            // ★ 第二步：逐帧 process
+                            if (alignedFrames.isNotEmpty()) {
+                                Log.v(TAG, "AECM fed ${alignedFrames.size} aligned frames, delay=${actualDelay}ms, aecmDelay=${aecmDelay}ms")
+                            }
+
+                            // ★ 逐帧 process，传固定小值
                             for (i in 0 until 6) {
                                 val startIdx = i * 80
                                 val endIdx = startIdx + 80
                                 val nearFrame = nearShorts.copyOfRange(startIdx, endIdx)
 
-                                // ★ msInSndCardBuf 不再用动态 delayMs
-                                // 而是告诉 AECM：远端帧比近端帧早了多少
-                                // 这个值应该 ≈ 你的实际播放延迟（AudioTrack buffer + 声学）
-                                val aecFrame = aecm.process(nearFrame, delay)
-
+                                val aecFrame = aecm.process(nearFrame, aecmDelay)
                                 aecFrame.copyInto(outShorts, startIdx)
                             }
-                            // ===== ★ AEC 处理结束 =====
                         }
                         else {
                             nearShorts.copyInto(outShorts, 0)
@@ -391,7 +393,7 @@ open class BaseMegaphoneService {
                 needsReinitialization = true
                 Log.w(TAG, "需要重新初始化AudioRecord", e)
                 // 递归重试
-                startRealTimeShout(isOpenAECM, delay)
+                startRealTimeShout(isOpenAECM, actualDelay)
             }
         }
     }

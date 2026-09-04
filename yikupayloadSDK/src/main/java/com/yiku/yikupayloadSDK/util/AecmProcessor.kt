@@ -32,7 +32,7 @@ class AecmProcessor(
     }
 
     /** 处理近端帧（麦克风录到的 8kHz PCM），输出去回声后的 PCM */
-    fun process(near: ShortArray, msInSndCardBuf: Int = 40): ShortArray {
+    fun process(near: ShortArray, msInSndCardBuf: Int = 120): ShortArray {
         val out = ShortArray(frameLength)
         nativeProcess(nativeInst, near, out, frameLength, msInSndCardBuf)
         return out
