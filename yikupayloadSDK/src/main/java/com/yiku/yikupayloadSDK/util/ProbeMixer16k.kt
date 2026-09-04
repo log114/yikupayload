@@ -6,10 +6,13 @@ import kotlin.math.pow
 class ProbeMixer16k {
     companion object {
         private const val SAMPLE_RATE = 16000
-        private const val PROBE_INTERVAL_MS = 2000
+        private const val PROBE_INTERVAL_MS = 10000
         private const val PROBE_DURATION_MS = 40
-        private const val PROBE_DB_SCALE = -25
+        private const val PROBE_DB_SCALE = -20
 
+        // ★ 最近一次 PN 开始播放的时间（毫秒）
+        @Volatile var lastPnPlayTimeMs: Long = 0L
+            private set
         // ★ probeSeq 作为静态常量，全局唯一，类加载时生成一次
         val PROBE_SEQ_16K: ShortArray = generateGoldSequenceStatic(
             SAMPLE_RATE * PROBE_DURATION_MS / 1000  // 640
@@ -38,7 +41,7 @@ class ProbeMixer16k {
     private var isProbing = false
     private var probeSeqOffset = 0
 
-    private val probeIntervalSamples = SAMPLE_RATE * PROBE_INTERVAL_MS / 1000   // 32000
+    private val probeIntervalSamples = SAMPLE_RATE * PROBE_INTERVAL_MS / 1000   // 160000
     private val probeDurationSamples = SAMPLE_RATE * PROBE_DURATION_MS / 1000   // 640
 
     fun mix(pcm16k: ShortArray): ShortArray {
@@ -47,6 +50,7 @@ class ProbeMixer16k {
                 sampleCounter % probeIntervalSamples == 0L) {
                 isProbing = true
                 probeSeqOffset = 0
+                lastPnPlayTimeMs = System.currentTimeMillis()  // ★ 记录
             }
 
             if (isProbing) {

@@ -287,9 +287,6 @@ open class BaseMegaphoneService {
             // ★ actualDelay 是标定值（~120ms），aecmDelay 固定 20ms
             val aecmDelay = 20  // 传给 AECM msInSndCardBuf，必须 ≤ 32
             var actualDelay = initialDelay
-            // ★ 探测计时
-            var lastEstimationTime = System.currentTimeMillis()
-            val ESTIMATION_INTERVAL = 2000L  // 每 2 秒检测一次PN，动态检测延迟
             val audioSource = MediaRecorder.AudioSource.MIC //来源
             val rate = 8000 //采样频率
             val track = AudioFormat.CHANNEL_IN_MONO //声道
@@ -342,21 +339,21 @@ open class BaseMegaphoneService {
 
                         val outShorts = ShortArray(480)
                         if(isOpenAECM) {
-                            // ★ 喂给延迟估计器
+                            // 喂给延迟估计器
                             delayEstimator.feedNear(nearShorts)
 
-                            // ★ 定期执行延迟估计
-                            val now = System.currentTimeMillis()
-                            if (now - lastEstimationTime > ESTIMATION_INTERVAL) {
-                                val est = delayEstimator.estimateOnce()
-                                delayEstimator.updateDelay(est)
-                                actualDelay = delayEstimator.getDelay()
-                                lastEstimationTime = now
+                            // ★ 每 100ms 自动检查（内部判断是否在 PN 回声窗口内）
+                            val est = delayEstimator.estimateOnce()
+                            delayEstimator.updateDelay(est)
+                            actualDelay = delayEstimator.getDelay()
+
+                            if (est != null) {
                                 Log.d(TAG, "计算延迟：$est，应用延迟：$actualDelay")
                             }
+
                             // ★ 关键：计算回声对应的远端播放时间
                             // 当前录到的声音，是 actualDelay ms 前播放的
-                            val echoOriginTime = now - actualDelay
+                            val echoOriginTime = System.currentTimeMillis() - actualDelay
 
                             // ★ 从队列取"时间对齐"的远端帧
                             val alignedFrames = farendProvider.pollAlignedFrames(echoOriginTime)
