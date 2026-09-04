@@ -7,6 +7,39 @@ import kotlin.experimental.and
 
 object Uilts {
     /**
+     * 生成"启动音效"风格的标定信号
+     * 听起来像一声短促的"啾~"，实际是 chirp
+     */
+    fun generateLaunchChirp16k(durationMs: Long = 800): ShortArray {
+        val sampleRate = 16000
+        val numSamples = (sampleRate * durationMs / 1000).toInt()
+        val pcm = ShortArray(numSamples)
+
+        // 从 800Hz 扫到 3000Hz（听起来像"啾~"，不会刺耳）
+        val fStart = 800.0
+        val fEnd = 3000.0
+        val k = (fEnd - fStart) / numSamples
+
+        for (i in 0 until numSamples) {
+            val t = i.toDouble() / sampleRate
+            val freq = fStart + k * i
+
+            // 淡入淡出，避免爆音
+            val fadeIn = if (i < sampleRate * 0.05) {
+                i.toDouble() / (sampleRate * 0.05)
+            } else 1.0
+            val fadeOut = if (i > numSamples - sampleRate * 0.1) {
+                (numSamples - i).toDouble() / (sampleRate * 0.1)
+            } else 1.0
+
+            val sample = (Math.sin(2 * Math.PI * freq * t) * fadeIn * fadeOut * 18000)
+                .toInt()
+                .coerceIn(-32767, 32767)
+            pcm[i] = sample.toShort()
+        }
+        return pcm
+    }
+    /**
      * 16kHz → 8kHz 简单降采样
      * 每 2 个样本取 1 个（如需更高质量可先做抗混叠低通）
      */

@@ -270,7 +270,7 @@ open class BaseMegaphoneService {
     }
 
     @RequiresPermission(value = "android.permission.RECORD_AUDIO")
-    open fun startRealTimeShout(isDisableRadio: Boolean) {
+    open fun startRealTimeShout(isOpenAECM: Boolean = true, delay: Int =200) {
         synchronized(audioLock) {
             // 检查是否已初始化并运行
             if (isRecording) {
@@ -280,11 +280,11 @@ open class BaseMegaphoneService {
 
             // ★ 录音启动前清空参考帧队列（防止拿到旧帧）
             farendProvider.clear()
-            var audioSource = MediaRecorder.AudioSource.MIC //来源
+            val audioSource = MediaRecorder.AudioSource.MIC //来源
             val rate = 8000 //采样频率
             val track = AudioFormat.CHANNEL_IN_MONO //声道
             val audioFormat = AudioFormat.ENCODING_PCM_16BIT //格式
-            var bufferSize = 960
+            val bufferSize = 960
             Log.i(TAG, "startRecord...")
 
             if (needsReinitialization || mAudioRecord == null) {
@@ -330,33 +330,38 @@ open class BaseMegaphoneService {
                         val nearShorts = Uilts.byteArrayToShortArray(data)  // 480 个 short
                         val outShorts = ShortArray(480)
 
-                        // ★ 第一步：把队列里积累的远端帧全部喂给 AECM
-                        // 这样 AECM 内部 ring buffer 里有足够的历史数据
-                        var drained = 0
-                        while (true) {
-                            val farFrame = farendProvider.pollFarendFrame() ?: break
-                            aecm.bufferFarend(farFrame.pcm, 80)
-                            drained++
-                        }
-                        // 调试用
-                        if (drained > 0) {
-                            Log.v(TAG, "AECM drained $drained farend frames")
-                        }
+                        if(isOpenAECM) {
+                            // ★ 第一步：把队列里积累的远端帧全部喂给 AECM
+                            // 这样 AECM 内部 ring buffer 里有足够的历史数据
+                            var drained = 0
+                            while (true) {
+                                val farFrame = farendProvider.pollFarendFrame() ?: break
+                                aecm.bufferFarend(farFrame.pcm, 80)
+                                drained++
+                            }
+                            // 调试用
+                            if (drained > 0) {
+                                Log.v(TAG, "AECM drained $drained farend frames")
+                            }
 
-                        // ★ 第二步：逐帧 process
-                        for (i in 0 until 6) {
-                            val startIdx = i * 80
-                            val endIdx = startIdx + 80
-                            val nearFrame = nearShorts.copyOfRange(startIdx, endIdx)
+                            // ★ 第二步：逐帧 process
+                            for (i in 0 until 6) {
+                                val startIdx = i * 80
+                                val endIdx = startIdx + 80
+                                val nearFrame = nearShorts.copyOfRange(startIdx, endIdx)
 
-                            // ★ msInSndCardBuf 不再用动态 delayMs
-                            // 而是告诉 AECM：远端帧比近端帧早了多少
-                            // 这个值应该 ≈ 你的实际播放延迟（AudioTrack buffer + 声学）
-                            val aecFrame = aecm.process(nearFrame, 40)
+                                // ★ msInSndCardBuf 不再用动态 delayMs
+                                // 而是告诉 AECM：远端帧比近端帧早了多少
+                                // 这个值应该 ≈ 你的实际播放延迟（AudioTrack buffer + 声学）
+                                val aecFrame = aecm.process(nearFrame, delay)
 
-                            aecFrame.copyInto(outShorts, startIdx)
+                                aecFrame.copyInto(outShorts, startIdx)
+                            }
+                            // ===== ★ AEC 处理结束 =====
                         }
-                        // ===== ★ AEC 处理结束 =====
+                        else {
+                            nearShorts.copyInto(outShorts, 0)
+                        }
 
                         // ★ 对 AEC 处理后的 PCM 做 Opus 编码
                         val ret = ByteArray(bufferSize / 8)
@@ -386,7 +391,7 @@ open class BaseMegaphoneService {
                 needsReinitialization = true
                 Log.w(TAG, "需要重新初始化AudioRecord", e)
                 // 递归重试
-                startRealTimeShout(isDisableRadio)
+                startRealTimeShout(isOpenAECM, delay)
             }
         }
     }
