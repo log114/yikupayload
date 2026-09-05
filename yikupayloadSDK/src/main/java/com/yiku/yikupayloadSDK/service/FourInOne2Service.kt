@@ -10,9 +10,6 @@ import com.yiku.yikupayloadSDK.util.Msg
 import com.yiku.yikupayloadSDK.util.MsgCallback
 import com.yiku.yikupayloadSDK.util.VehiclePlatform
 import com.yiku.yikupayloadSDK.util.bytesToHex
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.Socket
@@ -78,10 +75,7 @@ class FourInOne2Service : BaseMegaphoneService() {
                             if(it.toInt().toChar() == '[') {
                                 if (tmp.isNotEmpty() && tmp.size >= 4) {
                                     for (msgCallback in msgCallbacks) {
-                                        // 使用协程并发，不阻塞当前线程
-                                        CoroutineScope(Dispatchers.IO).launch {
-                                            msgCallback.onMsg(tmp)
-                                        }
+                                        msgCallback.onMsg(tmp)
                                     }
                                 }
                                 tmp = ByteArray(0);
@@ -90,10 +84,7 @@ class FourInOne2Service : BaseMegaphoneService() {
                         }
                         if (tmp.isNotEmpty() && tmp.size >= 4) {
                             for (msgCallback in msgCallbacks) {
-                                // 使用协程并发，不阻塞当前线程
-                                CoroutineScope(Dispatchers.IO).launch {
-                                    msgCallback.onMsg(tmp)
-                                }
+                                msgCallback.onMsg(tmp)
                             }
                             tmp = ByteArray(0);
                         }

@@ -46,11 +46,13 @@ class ProbeMixer16k {
 
     fun mix(pcm16k: ShortArray): ShortArray {
         for (i in pcm16k.indices) {
-            if (!isProbing && sampleCounter > 0 &&
-                sampleCounter % probeIntervalSamples == 0L) {
+            if (!isProbing && (
+                (sampleCounter > 0 && sampleCounter % probeIntervalSamples == 0L) ||
+                (sampleCounter == 0L && i == 0)  // ★ 第一帧立即触发
+            )) {
                 isProbing = true
                 probeSeqOffset = 0
-                lastPnPlayTimeMs = System.currentTimeMillis()  // ★ 记录
+                lastPnPlayTimeMs = System.currentTimeMillis()
             }
 
             if (isProbing) {
