@@ -85,6 +85,7 @@ open class BaseMegaphoneService {
     var getAudioFilesCallback: GetAudioFilesCallback? = null
 
     private val farendProvider = FarendProvider()
+    private val farendProvider_record = FarendProvider() // 记录录音的内容
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)  // 连接超时：30秒
@@ -278,15 +279,13 @@ open class BaseMegaphoneService {
                 Log.w(TAG, "已经在录音状态，忽略重复启动")
                 return
             }
-            // ★ 动态延迟估计器
-            val delayEstimator = DynamicDelayEstimator()
-            delayEstimator.updateDelay(initialDelay)  // 初始值
 
             // ★ 录音启动前清空参考帧队列（防止拿到旧帧）
             farendProvider.clear()
+            farendProvider_record.clear()
             // ★ actualDelay 是标定值（~120ms），aecmDelay 固定 20ms
             val aecmDelay = 20  // 传给 AECM msInSndCardBuf，必须 ≤ 32
-            var actualDelay = initialDelay
+
             val audioSource = MediaRecorder.AudioSource.MIC //来源
             val rate = 8000 //采样频率
             val track = AudioFormat.CHANNEL_IN_MONO //声道
@@ -326,90 +325,90 @@ open class BaseMegaphoneService {
                 val opusUtils = OpusUtils.getInstant()
 
                 // ★ 创建 AECM 处理器（录音线程内创建，线程内释放）
-                val aecm = AecmProcessor(rate, 4)
+                val aecm = AecmProcessor(rate, 4) // 本地 B→A
+                val aecmRecord = AecmProcessor(rate, 4) // 远端 A→B→空气→A（始终开）
 
                 recordingThread = thread {
                     val createEncoder = opusUtils.createEncoder(rate, 1, 1)
+                    var smoothLocalDelay = initialDelay
+                    var smoothRemoteDelay = initialDelay + 150   // 自举初始值
+
                     while (isRecording && !Thread.interrupted()) {
                         val read = mAudioRecord!!.read(data, 0, bufferSize)
                         if (read <= 0) continue
+                        val nearShorts = Uilts.byteArrayToShortArray(data) // 480@8k
+                        val now = System.currentTimeMillis()
 
-                        // ===== ★ AEC 处理开始 =====
-                        val nearShorts = Uilts.byteArrayToShortArray(data)  // 480 个 short
+                        // ===== 本地 farend =====
+                        val localHits = if (isOpenAECM) {
+                            farendProvider.pollAlignedFrames(now - smoothLocalDelay, 50)
+                        } else emptyList()
 
+                        if (localHits.isNotEmpty()) {
+                            val measured = (now - localHits.first().enqueueTimeMs).toInt()
+                            smoothLocalDelay = (smoothLocalDelay * 9 + measured) / 10
+                                .coerceIn(60, 300)
+                            for (f in localHits) aecm.bufferFarend(f.pcm, 80)
+                            Log.d(TAG, "LOC HIT ${localHits.size}fr meas=${measured}ms smooth=$smoothLocalDelay")
+                        }
+
+                        // ===== 远端 farend（始终开）=====
+                        val remoteHits = farendProvider_record
+                            .pollAlignedFrames(now - smoothRemoteDelay, 80)
+                        val hasRemote = remoteHits.isNotEmpty()
+
+                        if (hasRemote) {
+                            val measuredR = (now - remoteHits.first().enqueueTimeMs).toInt()
+                            smoothRemoteDelay = (smoothRemoteDelay * 9 + measuredR) / 10
+                                .coerceAtLeast(smoothLocalDelay + 50)
+                            for (f in remoteHits) aecmRecord.bufferFarend(f.pcm, 80)
+                            Log.d(TAG, "REM HIT ${remoteHits.size}fr measR=${measuredR}ms smoothR=$smoothRemoteDelay")
+                        }
+
+                        // ===== process + 合并 =====
                         val outShorts = ShortArray(480)
-                        if(isOpenAECM) {
-                            // 喂给延迟估计器
-                            delayEstimator.feedNear(nearShorts)
+                        for (i in 0 until 6) {
+                            val nearFrame = nearShorts.copyOfRange(i * 80, i * 80 + 80)
 
-                            // ★ 每 100ms 自动检查（内部判断是否在 PN 回声窗口内）
-                            val est = delayEstimator.estimateOnce()
-                            delayEstimator.updateDelay(est)
-                            actualDelay = delayEstimator.getDelay()
+                            val localOut = if (isOpenAECM && localHits.isNotEmpty())
+                                aecm.process(nearFrame, aecmDelay) else nearFrame.copyOf()
 
-                            if (est != null) {
-                                Log.d(TAG, "计算延迟：$est，应用延迟：$actualDelay")
+                            val remoteOut = if (hasRemote)
+                                aecmRecord.process(nearFrame, aecmDelay) else nearFrame.copyOf()
+
+                            val merged = ShortArray(80)
+                            if (hasRemote) {
+                                for (s in 0..79) {
+                                    val l = localOut[s].toInt(); val r = remoteOut[s].toInt()
+                                    merged[s] = if (kotlin.math.abs(l) < kotlin.math.abs(r))
+                                        l.toShort() else r.toShort()
+                                }
+                            } else {
+                                localOut.copyInto(merged)
                             }
-
-                            // ★ 关键：计算回声对应的远端播放时间
-                            // 当前录到的声音，是 actualDelay ms 前播放的
-                            val echoOriginTime = System.currentTimeMillis() - actualDelay
-
-                            // ★ 从队列取"时间对齐"的远端帧
-                            val alignedFrames = farendProvider.pollAlignedFrames(echoOriginTime)
-
-                            // ★ 喂给 AECM（连续喂入）
-                            for (farFrame in alignedFrames) {
-                                aecm.bufferFarend(farFrame, 80)
-                            }
-
-                            if (alignedFrames.isNotEmpty()) {
-                                Log.v(TAG, "AECM fed ${alignedFrames.size} aligned frames, delay=${actualDelay}ms, aecmDelay=${aecmDelay}ms")
-                            }
-
-                            // ★ 逐帧 process，传固定小值
-                            for (i in 0 until 6) {
-                                val startIdx = i * 80
-                                val endIdx = startIdx + 80
-                                val nearFrame = nearShorts.copyOfRange(startIdx, endIdx)
-
-                                val aecFrame = aecm.process(nearFrame, aecmDelay)
-                                aecFrame.copyInto(outShorts, startIdx)
-                            }
-                        }
-                        else {
-                            nearShorts.copyInto(outShorts, 0)
+                            merged.copyInto(outShorts, i * 80)
                         }
 
-                        // ★ 对 AEC 处理后的 PCM 做 Opus 编码
+                        // 把干净 PCM 喂给远端参考队列（注意：outShorts 是 8k，is16k=false）
+                        farendProvider_record.onBeforeSend(outShorts)
+
+                        // Opus 编码发送
                         val ret = ByteArray(bufferSize / 8)
-                        val rc = opusUtils.encode(createEncoder, outShorts, 0, ret)
-
-                        var sendData = REAL_TIME_SHOUT.toByteArray()
-                        if (AudioRecord.ERROR_INVALID_OPERATION != read) {
-                            try {
-                                sendData += ret
-                                sendData2Payload(sendData)
-                            } catch (e: IOException) {
-                                e.printStackTrace()
-                            }
-                        }
-                        try {
-                            Thread.sleep(10) // 添加异常捕获
-                        } catch (e: InterruptedException) {
-                            Log.w(TAG, "录音线程睡眠被中断，正常退出")
-                            break // 跳出循环
-                        }
+                        opusUtils.encode(createEncoder, outShorts, 0, ret)
+                        val sendData = REAL_TIME_SHOUT.toByteArray() + ret
+                        try { sendData2Payload(sendData) } catch (e: IOException) { e.printStackTrace() }
+                        try { Thread.sleep(10) } catch (e: InterruptedException) { break }
                     }
-                    opusUtils.destroyEncoder(createEncoder)  // 线程退出时释放编码器
-                    aecm.release()  // ★ 释放 AECM
+                    opusUtils.destroyEncoder(createEncoder)
+                    aecm.release()
+                    aecmRecord.release()
                 }
             } catch (e: IllegalStateException) {
                 // 标记需要重新初始化
                 needsReinitialization = true
                 Log.w(TAG, "需要重新初始化AudioRecord", e)
                 // 递归重试
-                startRealTimeShout(isOpenAECM, actualDelay)
+                startRealTimeShout(isOpenAECM, initialDelay)
             }
         }
     }
