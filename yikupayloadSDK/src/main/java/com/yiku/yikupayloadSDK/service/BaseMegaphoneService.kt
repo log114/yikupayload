@@ -85,7 +85,7 @@ open class BaseMegaphoneService {
     var getAudioFilesCallback: GetAudioFilesCallback? = null
 
     private val farendProvider = FarendProvider()
-    private val farendProvider_record = FarendProvider() // 记录录音的内容
+    private val farendProvider_record = FarendProvider(80, 400) // 记录录音的内容
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)  // 连接超时：30秒
@@ -330,8 +330,8 @@ open class BaseMegaphoneService {
 
                 recordingThread = thread {
                     val createEncoder = opusUtils.createEncoder(rate, 1, 1)
-                    var smoothLocalDelay = initialDelay
-                    var smoothRemoteDelay = initialDelay + 150   // 自举初始值
+                    var smoothLocalDelay = initialDelay          // 本地 ~120
+                    var smoothRemoteDelay = 350                  // 远端拍死 350，宁大勿小
 
                     while (isRecording && !Thread.interrupted()) {
                         val read = mAudioRecord!!.read(data, 0, bufferSize)
@@ -339,58 +339,80 @@ open class BaseMegaphoneService {
                         val nearShorts = Uilts.byteArrayToShortArray(data) // 480@8k
                         val now = System.currentTimeMillis()
 
-                        // ===== 本地 farend =====
+                        // ===== ① 本地 farend（仅 isOpenAECM）=====
                         val localHits = if (isOpenAECM) {
                             farendProvider.pollAlignedFrames(now - smoothLocalDelay, 50)
+                                .filter { (now - it.enqueueTimeMs) >= 40 } // 本地至少 40ms 前
                         } else emptyList()
 
                         if (localHits.isNotEmpty()) {
-                            val measured = (now - localHits.first().enqueueTimeMs).toInt()
-                            smoothLocalDelay = (smoothLocalDelay * 9 + measured) / 10
-                                .coerceIn(60, 300)
+                            val m = (now - localHits.first().enqueueTimeMs).toInt()
+                            smoothLocalDelay = (smoothLocalDelay * 9 + m) / 10
+                                .coerceIn(60, 250)
                             for (f in localHits) aecm.bufferFarend(f.pcm, 80)
-                            Log.d(TAG, "LOC HIT ${localHits.size}fr meas=${measured}ms smooth=$smoothLocalDelay")
                         }
 
-                        // ===== 远端 farend（始终开）=====
-                        val remoteHits = farendProvider_record
-                            .pollAlignedFrames(now - smoothRemoteDelay, 80)
+                        // ===== ② 远端 farend（始终开！不受 isOpenAECM 控制）=====
+                        val remoteRaw = farendProvider_record
+                            .pollAlignedFrames(now - smoothRemoteDelay, 150)
+                        // ★ 核心：只认 180ms 以上的老帧，刚喂的自己直接扔
+                        val remoteHits = remoteRaw.filter {
+                            (now - it.enqueueTimeMs) >= 180
+                        }
                         val hasRemote = remoteHits.isNotEmpty()
 
                         if (hasRemote) {
-                            val measuredR = (now - remoteHits.first().enqueueTimeMs).toInt()
-                            smoothRemoteDelay = (smoothRemoteDelay * 9 + measuredR) / 10
-                                .coerceAtLeast(smoothLocalDelay + 50)
-                            for (f in remoteHits) aecmRecord.bufferFarend(f.pcm, 80)
-                            Log.d(TAG, "REM HIT ${remoteHits.size}fr measR=${measuredR}ms smoothR=$smoothRemoteDelay")
-                        }
-
-                        // ===== process + 合并 =====
-                        val outShorts = ShortArray(480)
-                        for (i in 0 until 6) {
-                            val nearFrame = nearShorts.copyOfRange(i * 80, i * 80 + 80)
-
-                            val localOut = if (isOpenAECM && localHits.isNotEmpty())
-                                aecm.process(nearFrame, aecmDelay) else nearFrame.copyOf()
-
-                            val remoteOut = if (hasRemote)
-                                aecmRecord.process(nearFrame, aecmDelay) else nearFrame.copyOf()
-
-                            val merged = ShortArray(80)
-                            if (hasRemote) {
-                                for (s in 0..79) {
-                                    val l = localOut[s].toInt(); val r = remoteOut[s].toInt()
-                                    merged[s] = if (kotlin.math.abs(l) < kotlin.math.abs(r))
-                                        l.toShort() else r.toShort()
-                                }
-                            } else {
-                                localOut.copyInto(merged)
+                            val mR = (now - remoteHits.first().enqueueTimeMs).toInt()
+                            if (mR in 200..800) {   // 合理范围才自举
+                                smoothRemoteDelay = ((smoothRemoteDelay * 9 + mR) / 10)
+                                    .coerceIn(200, 600)
                             }
-                            merged.copyInto(outShorts, i * 80)
+                            for (f in remoteHits) aecmRecord.bufferFarend(f.pcm, 80)
+                            Log.d(TAG, "REM HIT ${remoteHits.size} age=${mR}ms delay=$smoothRemoteDelay")
                         }
 
-                        // 把干净 PCM 喂给远端参考队列（注意：outShorts 是 8k，is16k=false）
-                        farendProvider_record.onBeforeSend(outShorts)
+                        // ===== ③ 逐帧 process + 合并 =====
+                        val outShorts = ShortArray(480)
+                        val dynamicAecmDelay = (smoothRemoteDelay / 10).coerceIn(1, 32) // AECM 通常要求 ≤32
+                        for (i in 0 until 6) {
+                            val nf = nearShorts.copyOfRange(i * 80, i * 80 + 80)
+
+                            // 本地分支
+                            val locOut = if (isOpenAECM && localHits.isNotEmpty())
+                                aecm.process(nf, aecmDelay) else nf.copyOf()
+
+                            // 远端分支：始终，只要取到老参考
+                            val remOut = if (hasRemote)
+                                aecmRecord.process(nf, dynamicAecmDelay) else nf.copyOf()
+
+                            val mrg = ShortArray(80)
+                            when {
+                                hasRemote && !isOpenAECM -> {
+                                    // 只开远端：检查远端 AECM 输出能量
+                                    val eRem = remOut.fold(0L) { a, s -> a + s.toInt()*s.toInt() }
+                                    val eNear = nf.fold(0L) { a, s -> a + s.toInt()*s.toInt() }
+
+                                    // 如果远端输出能量 > 近端原始能量的 30%，说明消除失败/双讲，信任原始近端
+                                    if (eRem > eNear / 3) {
+                                        nf.copyInto(mrg) // 信任原始人声
+                                    } else {
+                                        remOut.copyInto(mrg) // 消除成功，用远端输出
+                                    }
+                                }
+                                hasRemote && isOpenAECM -> {
+                                    // 两路都开：帧级选能量小的（比逐样本 min 干净 10 倍）
+                                    val eLoc = locOut.fold(0L) { a, s -> a + s.toInt()*s.toInt() }
+                                    val eRem = remOut.fold(0L) { a, s -> a + s.toInt()*s.toInt() }
+                                    (if (eLoc < eRem) locOut else remOut).copyInto(mrg)
+                                }
+                                isOpenAECM -> locOut.copyInto(mrg)
+                                else -> nf.copyInto(mrg)   // 全关纯直通
+                            }
+                            mrg.copyInto(outShorts, i * 80)
+                        }
+
+                        // ===== ④ 喂远端参考：用实际要发出的 PCM =====
+                        farendProvider_record.feed(outShorts, false)
 
                         // Opus 编码发送
                         val ret = ByteArray(bufferSize / 8)
