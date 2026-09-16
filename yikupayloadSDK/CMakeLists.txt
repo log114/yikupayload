@@ -53,3 +53,58 @@ target_compile_options(aecm PRIVATE
 
 # 链接日志库和数学库(m)[2](@ref)
 target_link_libraries(aecm ${log-lib} m)
+
+# ========== SpeexDSP 部分 ==========
+# 顶部最好加一行 project，消 warning（放在 cmake_minimum_required 后面任意处）
+# project(yikupayloadSDK)   # ← 取消注释放到文件前面去
+
+set(SPEEX src/main/cpp/speexdsp)
+
+# 1) SpeexDSP 静态库
+add_library(speexdsp_static STATIC
+        ${SPEEX}/libspeexdsp/mdf.c
+        ${SPEEX}/libspeexdsp/preprocess.c
+        ${SPEEX}/libspeexdsp/fftwrap.c
+        ${SPEEX}/libspeexdsp/kiss_fft.c
+        ${SPEEX}/libspeexdsp/kiss_fftr.c
+        ${SPEEX}/libspeexdsp/filterbank.c
+        ${SPEEX}/libspeexdsp/buffer.c
+        ${SPEEX}/libspeexdsp/jitter.c
+        ${SPEEX}/libspeexdsp/resample.c
+        ${SPEEX}/libspeexdsp/scal.c
+)
+target_include_directories(speexdsp_static PUBLIC
+        ${SPEEX}/include
+        ${SPEEX}/libspeexdsp
+)
+target_compile_definitions(speexdsp_static
+        PRIVATE
+        FLOATING_POINT=1
+        USE_KISS_FFT=1          # ★ 胶水层选 kiss 后端
+)
+target_compile_options(speexdsp_static PRIVATE -O3 -DNDEBUG)
+
+# 2) JNI so —— 源文件路径必须 100% 对！
+#    你的 CMakeLists.txt 在 yikupayloadSDK/ 下，cpp 实际在 src/main/cpp/speex_aec.cpp
+set(SPEEX_AEC_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/main/cpp/speex_aec.cpp)
+
+# ★ 先确认文件在不在，不在就直接 fatal，比隐晦报错好排
+if(NOT EXISTS ${SPEEX_AEC_SRC})
+    message(FATAL_ERROR "speex_aec.cpp NOT FOUND at ${SPEEX_AEC_SRC}")
+endif()
+
+add_library(speexaec SHARED
+        ${SPEEX_AEC_SRC}
+)
+
+# ★ 必须在 add_library 之后！
+set_target_properties(speexaec PROPERTIES
+        CXX_STANDARD 11
+        CXX_STANDARD_REQUIRED YES
+)
+
+target_link_libraries(speexaec
+        speexdsp_static
+        log
+        m
+)

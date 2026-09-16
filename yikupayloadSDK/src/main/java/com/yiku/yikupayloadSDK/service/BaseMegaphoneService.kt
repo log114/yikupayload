@@ -6,10 +6,10 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.media.AudioFormat
 import android.media.AudioRecord
+import android.media.AudioRecord.STATE_INITIALIZED
 import android.media.MediaRecorder
 import android.os.Build
 import android.util.Log
-import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresPermission
 import com.yiku.yikupayloadSDK.protocol.ALARM_PLAY
 import com.yiku.yikupayloadSDK.protocol.AUDIO_DEL
@@ -46,17 +46,15 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import com.alibaba.fastjson.JSONObject
 import com.yiku.yikupayloadSDK.protocol.TTS_SPEECH_RATE
-import com.yiku.yikupayloadSDK.util.AecmProcessor
-import com.yiku.yikupayloadSDK.util.DynamicDelayEstimator
 import com.yiku.yikupayloadSDK.util.FarendProvider
 import com.yiku.yikupayloadSDK.util.ProgressRequestBody
+import com.yiku.yikupayloadSDK.util.SpeexAecProcessor
 import com.yiku.yikupayloadSDK.util.Uilts.normalizeExtensionToLowerCase
 import com.yiku.yikupayloadSDK.util.bytesToHex
 import okhttp3.FormBody
 import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
-import okhttp3.RequestBody
 import java.util.concurrent.TimeUnit
 
 
@@ -85,7 +83,6 @@ open class BaseMegaphoneService {
     var getAudioFilesCallback: GetAudioFilesCallback? = null
 
     private val farendProvider = FarendProvider()
-    private val farendProvider_record = FarendProvider(80, 400) // 记录录音的内容
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)  // 连接超时：30秒
@@ -274,162 +271,171 @@ open class BaseMegaphoneService {
     @RequiresPermission(value = "android.permission.RECORD_AUDIO")
     open fun startRealTimeShout(isOpenAECM: Boolean = true, initialDelay: Int = 120) {
         synchronized(audioLock) {
-            // 检查是否已初始化并运行
-            if (isRecording) {
-                Log.w(TAG, "已经在录音状态，忽略重复启动")
-                return
-            }
+            if (isRecording) { Log.w(TAG, "已经在录音状态，忽略重复启动"); return }
 
-            // ★ 录音启动前清空参考帧队列（防止拿到旧帧）
             farendProvider.clear()
-            farendProvider_record.clear()
-            // ★ actualDelay 是标定值（~120ms），aecmDelay 固定 20ms
-            val aecmDelay = 20  // 传给 AECM msInSndCardBuf，必须 ≤ 32
 
-            val audioSource = MediaRecorder.AudioSource.MIC //来源
-            val rate = 8000 //采样频率
-            val track = AudioFormat.CHANNEL_IN_MONO //声道
-            val audioFormat = AudioFormat.ENCODING_PCM_16BIT //格式
+            val wantUnprocessed = true
+            val audioSource = if (wantUnprocessed)
+                MediaRecorder.AudioSource.UNPROCESSED else MediaRecorder.AudioSource.MIC
+            val rate = 8000
+            val track = AudioFormat.CHANNEL_IN_MONO
+            val audioFormat = AudioFormat.ENCODING_PCM_16BIT
             val bufferSize = 960
-            Log.i(TAG, "startRecord...")
+            Log.i(TAG, "startRecord src=$audioSource ...")
 
             if (needsReinitialization || mAudioRecord == null) {
                 releaseAudioResources()
-                // 在创建 AudioRecord 实例前检查麦克风是否被占用
                 if (!isMicrophoneAvailable(audioSource, rate, track, audioFormat, bufferSize)) {
-                    Log.e(TAG, "无法启动录音：麦克风可能已被其他应用占用或不可用。")
-                    isRecording = true
-                    return // 直接返回，不再进行后续初始化
+                    Log.e(TAG, "麦克风不可用")
+                    isRecording = true; return
                 }
-                // 创建新实例...
-                mAudioRecord = AudioRecord(
-                    audioSource, rate,
-                    track, audioFormat, bufferSize
-                ).apply {
-                    // 显式检查状态
-                    if (state != AudioRecord.STATE_INITIALIZED) {
-                        throw IllegalStateException("AudioRecord初始化失败")
+                try {
+                    mAudioRecord = AudioRecord(audioSource, rate, track, audioFormat, bufferSize).apply {
+                        if (state != STATE_INITIALIZED) throw IllegalStateException("init fail")
                     }
+                } catch (e: Exception) {
+                    Log.w(TAG, "fallback MIC", e)
+                    mAudioRecord = AudioRecord(
+                        MediaRecorder.AudioSource.MIC, rate, track, audioFormat, bufferSize
+                    ).apply { if (state != STATE_INITIALIZED) throw IllegalStateException("MIC also fail") }
                 }
                 needsReinitialization = false
                 mAudioRecord!!.startRecording()
             }
 
             val data = ByteArray(bufferSize)
-
             try {
                 isRecording = true
-                // 添加回调调用 - 在录音线程启动前
                 onRecordingReady?.invoke()
-
                 val opusUtils = OpusUtils.getInstant()
 
-                // ★ 创建 AECM 处理器（录音线程内创建，线程内释放）
-                val aecm = AecmProcessor(rate, 4) // 本地 B→A
-                val aecmRecord = AecmProcessor(rate, 4) // 远端 A→B→空气→A（始终开）
+                val localSpeex  = if (isOpenAECM) SpeexAecProcessor(8000, 80, 250, true)  else null
+                val remoteSpeex = SpeexAecProcessor(8000, 80, 480, false)
 
                 recordingThread = thread {
-                    val createEncoder = opusUtils.createEncoder(rate, 1, 1)
-                    var smoothLocalDelay = initialDelay          // 本地 ~120
-                    var smoothRemoteDelay = 350                  // 远端拍死 350，宁大勿小
+                    val enc = opusUtils.createEncoder(rate, 1, 1)
+                    var smoothLocalDelay = initialDelay
+                    var lastLocalFar = ShortArray(80)
+
+                    var smoothEnergy = 0L
+                    var suddenCount = 0      // 突发翻倍计数
+                    var creepCount  = 0      // 缓增计数（抓嗡嗡）
+                    var muteUntil = 0L
+                    val lastSent = ShortArray(480)
+                    val sentFrame = ShortArray(80)   // 复用，少分配
 
                     while (isRecording && !Thread.interrupted()) {
-                        val read = mAudioRecord!!.read(data, 0, bufferSize)
-                        if (read <= 0) continue
-                        val nearShorts = Uilts.byteArrayToShortArray(data) // 480@8k
                         val now = System.currentTimeMillis()
 
-                        // ===== ① 本地 farend（仅 isOpenAECM）=====
-                        val localHits = if (isOpenAECM) {
-                            farendProvider.pollAlignedFrames(now - smoothLocalDelay, 50)
-                                .filter { (now - it.enqueueTimeMs) >= 40 } // 本地至少 40ms 前
-                        } else emptyList()
+                        // 拆上一轮真实发出的 PCM，等下逐帧 playback
+                        // （lastSent 初始化是全零，前 350ms 参考=静音，AEC 安全）
 
-                        if (localHits.isNotEmpty()) {
-                            val m = (now - localHits.first().enqueueTimeMs).toInt()
-                            smoothLocalDelay = (smoothLocalDelay * 9 + m) / 10
-                                .coerceIn(60, 250)
-                            for (f in localHits) aecm.bufferFarend(f.pcm, 80)
-                        }
+                        // 1) 读 MIC
+                        val read = mAudioRecord!!.read(data, 0, bufferSize)
+                        if (read <= 0) continue
+                        val nearAll = Uilts.byteArrayToShortArray(data)
+                        val blockEnergy = nearAll.fold(0L) { a, s -> a + s.toInt() * s.toInt() }
+                        val nearSilent = blockEnergy < 200_000_000L
+                        val outAll = ShortArray(480)
 
-                        // ===== ② 远端 farend（始终开！不受 isOpenAECM 控制）=====
-                        val remoteRaw = farendProvider_record
-                            .pollAlignedFrames(now - smoothRemoteDelay, 150)
-                        // ★ 核心：只认 180ms 以上的老帧，刚喂的自己直接扔
-                        val remoteHits = remoteRaw.filter {
-                            (now - it.enqueueTimeMs) >= 180
-                        }
-                        val hasRemote = remoteHits.isNotEmpty()
-
-                        if (hasRemote) {
-                            val mR = (now - remoteHits.first().enqueueTimeMs).toInt()
-                            if (mR in 200..800) {   // 合理范围才自举
-                                smoothRemoteDelay = ((smoothRemoteDelay * 9 + mR) / 10)
-                                    .coerceIn(200, 600)
-                            }
-                            for (f in remoteHits) aecmRecord.bufferFarend(f.pcm, 80)
-                            Log.d(TAG, "REM HIT ${remoteHits.size} age=${mR}ms delay=$smoothRemoteDelay")
-                        }
-
-                        // ===== ③ 逐帧 process + 合并 =====
-                        val outShorts = ShortArray(480)
-                        val dynamicAecmDelay = (smoothRemoteDelay / 10).coerceIn(1, 32) // AECM 通常要求 ≤32
                         for (i in 0 until 6) {
-                            val nf = nearShorts.copyOfRange(i * 80, i * 80 + 80)
+                            // 取这一帧的历史参考（上一轮 lastSent 里对应位置）
+                            System.arraycopy(lastSent, i * 80, sentFrame, 0, 80)
 
-                            // 本地分支
-                            val locOut = if (isOpenAECM && localHits.isNotEmpty())
-                                aecm.process(nf, aecmDelay) else nf.copyOf()
+                            val nf = if (nearSilent) ShortArray(80)
+                            else nearAll.copyOfRange(i * 80, i * 80 + 80)
 
-                            // 远端分支：始终，只要取到老参考
-                            val remOut = if (hasRemote)
-                                aecmRecord.process(nf, dynamicAecmDelay) else nf.copyOf()
+                            // ★ 帧内严格交替：先 playback 一帧 far，再 capture 一帧 near
+                            remoteSpeex.playback(sentFrame)
 
-                            val mrg = ShortArray(80)
-                            when {
-                                hasRemote && !isOpenAECM -> {
-                                    // 只开远端：检查远端 AECM 输出能量
-                                    val eRem = remOut.fold(0L) { a, s -> a + s.toInt()*s.toInt() }
-                                    val eNear = nf.fold(0L) { a, s -> a + s.toInt()*s.toInt() }
-
-                                    // 如果远端输出能量 > 近端原始能量的 30%，说明消除失败/双讲，信任原始近端
-                                    if (eRem > eNear / 3) {
-                                        nf.copyInto(mrg) // 信任原始人声
-                                    } else {
-                                        remOut.copyInto(mrg) // 消除成功，用远端输出
-                                    }
-                                }
-                                hasRemote && isOpenAECM -> {
-                                    // 两路都开：帧级选能量小的（比逐样本 min 干净 10 倍）
-                                    val eLoc = locOut.fold(0L) { a, s -> a + s.toInt()*s.toInt() }
-                                    val eRem = remOut.fold(0L) { a, s -> a + s.toInt()*s.toInt() }
-                                    (if (eLoc < eRem) locOut else remOut).copyInto(mrg)
-                                }
-                                isOpenAECM -> locOut.copyInto(mrg)
-                                else -> nf.copyInto(mrg)   // 全关纯直通
+                            if (isOpenAECM) {
+                                val hit = farendProvider.pollOne(now - smoothLocalDelay, 18)
+                                val lf = if (hit != null) {
+                                    val meas = (now - hit.enqueueTimeMs).toInt().coerceIn(40, 350)
+                                    smoothLocalDelay = (smoothLocalDelay * 9 + meas) / 10
+                                    hit.pcm
+                                } else lastLocalFar
+                                localSpeex?.playback(lf)
+                                lastLocalFar = lf
                             }
-                            mrg.copyInto(outShorts, i * 80)
+
+                            val locOut = if (isOpenAECM) localSpeex!!.process(nf) else nf
+                            val remOut = remoteSpeex.process(nf)      // 内部 speex_echo_capture
+                            val mrg = if (isOpenAECM) {
+                                val eL = locOut.fold(0L) { a, s -> a + s.toInt() * s.toInt() }
+                                val eR = remOut.fold(0L) { a, s -> a + s.toInt() * s.toInt() }
+                                if (eL < eR) locOut else remOut
+                            } else remOut
+                            mrg.copyInto(outAll, i * 80)
                         }
 
-                        // ===== ④ 喂远端参考：用实际要发出的 PCM =====
-                        farendProvider_record.feed(outShorts, false)
+                        // ==================== Guard V3 ====================
+                        val energy = outAll.fold(0L) { a, s -> a + s.toInt() * s.toInt() }
+                        val old = smoothEnergy
+                        smoothEnergy = (smoothEnergy * 7 + energy * 3) / 10
 
-                        // Opus 编码发送
+                        // 模式 A：真·突发（拍麦/爆音/瞬间啸叫尖峰）
+                        // 你机器满幅块能量 ~5e11，正常说话 5e9~2e10，门槛放 2e10 以上才不误杀
+                        val sudden = energy > 25_000_000_000L &&
+                                energy > old * 3 &&
+                                old > 2_000_000_000L
+
+                        // 模式 B：缓增嗡嗡（回声正反馈慢慢爬，每帧 +20~40%）
+                        val creeping = energy > 4_000_000_000L &&
+                                energy > old * 1.18 &&
+                                old > 1_000_000_000L
+
+                        var isMuted = false
+                        if (now < muteUntil) {
+                            outAll.fill(0); isMuted = true
+                        } else if (sudden) {
+                            suddenCount++
+                            creepCount = 0
+                            if (suddenCount >= 4) {          // 40ms 连续突发 → 确认
+                                muteUntil = now + 500L
+                                suddenCount = 0
+                                outAll.fill(0); isMuted = true
+                                Log.w(TAG, "HOWL sudden mute  energy=$energy  old=$old")
+                            }
+                        } else if (creeping) {
+                            creepCount++
+                            suddenCount = 0
+                            if (creepCount >= 10) {          // 连续 100ms 缓增 → 抓嗡嗡
+                                muteUntil = now + 600L
+                                creepCount = 0
+                                outAll.fill(0); isMuted = true
+                                Log.w(TAG, "HOWL creep mute   energy=$energy  old=$old  cnt=$creepCount")
+                            }
+                        } else {
+                            // 能量掉下去了才衰减计数，避免说话停顿误清
+                            if (energy < old * 0.7) {
+                                suddenCount = maxOf(0, suddenCount - 2)
+                                creepCount  = maxOf(0, creepCount - 3)
+                            }
+                        }
+
+                        // 噪声门（极静时发零，但参考已经在顶部 playback 过了）
+                        val finalOut = if (!isMuted && blockEnergy < 100_000_000L) ShortArray(480) else outAll
+
+                        // 编码发送
                         val ret = ByteArray(bufferSize / 8)
-                        opusUtils.encode(createEncoder, outShorts, 0, ret)
-                        val sendData = REAL_TIME_SHOUT.toByteArray() + ret
-                        try { sendData2Payload(sendData) } catch (e: IOException) { e.printStackTrace() }
-                        try { Thread.sleep(10) } catch (e: InterruptedException) { break }
+                        opusUtils.encode(enc, finalOut, 0, ret)
+                        val send = REAL_TIME_SHOUT.toByteArray() + ret
+                        try { sendData2Payload(send) } catch (_: IOException) {}
+
+                        // 保存本轮真实发出去的东西 → 下轮拆帧 playback
+                        System.arraycopy(finalOut, 0, lastSent, 0, 480)
+
+                        try { Thread.sleep(10) } catch (_: InterruptedException) { break }
                     }
-                    opusUtils.destroyEncoder(createEncoder)
-                    aecm.release()
-                    aecmRecord.release()
+                    opusUtils.destroyEncoder(enc)
+                    localSpeex?.release()
+                    remoteSpeex.release()
                 }
             } catch (e: IllegalStateException) {
-                // 标记需要重新初始化
                 needsReinitialization = true
-                Log.w(TAG, "需要重新初始化AudioRecord", e)
-                // 递归重试
+                Log.w(TAG, "re-init", e)
                 startRealTimeShout(isOpenAECM, initialDelay)
             }
         }

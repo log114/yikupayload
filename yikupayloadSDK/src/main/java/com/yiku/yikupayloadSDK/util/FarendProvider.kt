@@ -42,6 +42,23 @@ class FarendProvider(
         }
         return result
     }
+    /** 时间窗内取唯一一帧并移除，没有返回 null */
+    fun pollOne(targetMs: Long, windowMs: Long = 18): TimedFrame? {
+        val lower = targetMs - windowMs
+        val upper = targetMs + windowMs
+        val iter = queue.iterator()
+        var best: TimedFrame? = null
+        while (iter.hasNext()) {
+            val f = iter.next()
+            if (f.enqueueTimeMs in lower..upper) {
+                best = f
+                iter.remove()
+            } else if (f.enqueueTimeMs < lower) {
+                iter.remove()   // 太老的丢
+            }
+        }
+        return best
+    }
 
     fun clear() = queue.clear()
 }
