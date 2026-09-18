@@ -4,6 +4,7 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.experimental.and
+import kotlin.math.sqrt
 
 object Uilts {
     /**
@@ -43,5 +44,30 @@ object Uilts {
         } else {
             name
         }
+    }
+
+    data class AcfResult(val lag: Int, val normAcf: Double)
+
+    fun rms(s: ShortArray): Double {
+        var sum = 0L
+        for (x in s) sum += x.toLong() * x.toLong()
+        return sqrt(sum / s.size.toDouble())
+    }
+
+    fun checkHowling(pcm: ShortArray): AcfResult {
+        val n = pcm.size
+        var energy = 0L
+        for (i in 0 until n) energy += pcm[i].toLong() * pcm[i].toLong()
+        if (energy < 500_000) return AcfResult(0, 0.0)
+
+        var bestLag = 0
+        var bestDot = 0L
+        for (lag in 10..160) {
+            var dot = 0L
+            for (i in 0 until n - lag) dot += pcm[i].toLong() * pcm[i + lag]
+            if (dot > bestDot) { bestDot = dot; bestLag = lag }
+        }
+        val norm = bestDot.toDouble() / (energy + 1e-10)
+        return AcfResult(bestLag, norm)
     }
 }

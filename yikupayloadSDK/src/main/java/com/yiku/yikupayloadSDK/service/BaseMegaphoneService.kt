@@ -50,7 +50,9 @@ import com.yiku.yikupayloadSDK.util.AecmProcessor
 import com.yiku.yikupayloadSDK.util.DynamicDelayEstimator
 import com.yiku.yikupayloadSDK.util.FarendProvider
 import com.yiku.yikupayloadSDK.util.ProgressRequestBody
+import com.yiku.yikupayloadSDK.util.Uilts.checkHowling
 import com.yiku.yikupayloadSDK.util.Uilts.normalizeExtensionToLowerCase
+import com.yiku.yikupayloadSDK.util.Uilts.rms
 import com.yiku.yikupayloadSDK.util.bytesToHex
 import okhttp3.FormBody
 import okhttp3.MediaType
@@ -58,6 +60,7 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import java.util.concurrent.TimeUnit
+import kotlin.math.max
 
 
 interface UploadFileCallback {
@@ -289,7 +292,7 @@ open class BaseMegaphoneService {
             // ★ actualDelay 是标定值（~120ms），aecmDelay 固定 20ms
             val aecmDelay = 30  // 传给 AECM msInSndCardBuf，必须 ≤ 32
             var actualDelay = initialDelay
-            val audioSource = MediaRecorder.AudioSource.UNPROCESSED //来源
+            val audioSource = MediaRecorder.AudioSource.MIC //来源
             val rate = 8000 //采样频率
             val track = AudioFormat.CHANNEL_IN_MONO //声道
             val audioFormat = AudioFormat.ENCODING_PCM_16BIT //格式
@@ -331,6 +334,12 @@ open class BaseMegaphoneService {
                 val aecm = AecmProcessor(rate, 4)
                 val recordAecm = AecmProcessor(rate, 4)
 
+                // ---- 啸叫检测状态 ----
+                var howlConfidence = 0
+                var lastHowlLag = 0
+                var howlGain = 1.0f
+
+
                 recordingThread = thread {
                     val createEncoder = opusUtils.createEncoder(rate, 1, 1)
                     while (isRecording && !Thread.interrupted()) {
@@ -359,7 +368,7 @@ open class BaseMegaphoneService {
                             val echoOriginTime = System.currentTimeMillis() - actualDelay
 
                             // ★ 从队列取"时间对齐"的远端帧
-                            val alignedFrames = farendProvider.pollAlignedFrames(echoOriginTime)
+                            val alignedFrames = farendProvider.pollExact6(echoOriginTime)
 
                             // ★ 喂给 AECM（连续喂入）
                             for (farFrame in alignedFrames) {
@@ -385,7 +394,7 @@ open class BaseMegaphoneService {
                         }
 
                         val remoteShorts = ShortArray(480)
-                        val remoteAlignedFrames = recordFarendProvider.pollAlignedFrames(System.currentTimeMillis() - 300)
+                        val remoteAlignedFrames = recordFarendProvider.pollExact6(System.currentTimeMillis() - 300)
                         // ★ 喂给 AECM（连续喂入）
                         for (farFrame in remoteAlignedFrames) {
                             recordAecm.bufferFarend(farFrame, 80)
@@ -400,19 +409,75 @@ open class BaseMegaphoneService {
                             aecFrame.copyInto(remoteShorts, startIdx)
                         }
 
+                        // ---- 发送前静音门 + 啸叫压制 ----
+                        val outRms = rms(remoteShorts)
+                        Log.d(TAG, "outRms1=${rms(localShorts)} outRms2=${rms(remoteShorts)}")
+                        when {
+                            // 1) 极小能量：直接静音，环路彻底断
+                            outRms < 600.0 -> {
+                                remoteShorts.fill(0.toShort())
+                                howlGain = 1f
+                                howlConfidence = 0
+                            }
+                            // 2) 中等能量：强压，不让它慢慢爬
+                            outRms < 2500.0 -> {
+                                for (i in remoteShorts.indices)
+                                    remoteShorts[i] = (remoteShorts[i] * 0.25f).toInt()
+                                        .coerceIn(-32768, 32767).toShort()
+                            }
+                            // 3) 大能量：半压兜底
+                            else -> {
+                                for (i in remoteShorts.indices)
+                                    remoteShorts[i] = (remoteShorts[i] * 0.5f).toInt()
+                                        .coerceIn(-32768, 32767).toShort()
+                            }
+                        }
+                        // ---- 自相关啸叫检测（硬门之后，remoteShorts 可能已被压/静音） ----
+                        val acf = checkHowling(remoteShorts)
+                        val nearRmsNow = rms(nearShorts)
+                        val singleTalk = nearRmsNow < 800.0
+
+                        if (singleTalk && acf.normAcf > 0.55) {
+                            if (lastHowlLag == 0 || acf.lag != lastHowlLag) {
+                                lastHowlLag = acf.lag
+                                howlConfidence = 1
+                            } else {
+                                howlConfidence++
+                            }
+                        } else {
+                            howlConfidence = max(0, howlConfidence - 2)
+                            if (howlConfidence == 0) lastHowlLag = 0
+                        }
+
+                        if (howlConfidence >= 4) {
+                            howlGain *= 0.3f
+                            if (howlGain < 0.02f) howlGain = 0.02f
+                            howlConfidence = 2
+                            Log.w("Howl", "HOWLING! lag=$lastHowlLag norm=${"%.2f".format(acf.normAcf)} gain=$howlGain")
+                        } else if (howlConfidence == 0) {
+                            howlGain += 0.05f
+                            if (howlGain > 1f) howlGain = 1f
+                        }
+
+                        // 软增益再叠一层（硬门已经 fill(0) 时乘 1 无影响）
+                        if (howlGain < 0.99f) {
+                            val g = howlGain
+                            for (i in remoteShorts.indices)
+                                remoteShorts[i] = (remoteShorts[i] * g).toInt()
+                                    .coerceIn(-32768, 32767).toShort()
+                        }
+
                         recordFarendProvider.onBeforeRecord(remoteShorts) // 录音内容参考帧
                         // ★ 对 AEC 处理后的 PCM 做 Opus 编码
                         val ret = ByteArray(bufferSize / 8)
                         val rc = opusUtils.encode(createEncoder, remoteShorts, 0, ret)
 
                         var sendData = REAL_TIME_SHOUT.toByteArray()
-                        if (AudioRecord.ERROR_INVALID_OPERATION != read) {
-                            try {
-                                sendData += ret
-                                sendData2Payload(sendData)
-                            } catch (e: IOException) {
-                                e.printStackTrace()
-                            }
+                        try {
+                            sendData += ret
+                            sendData2Payload(sendData)
+                        } catch (e: IOException) {
+                            e.printStackTrace()
                         }
                         try {
                             Thread.sleep(10) // 添加异常捕获
@@ -423,6 +488,7 @@ open class BaseMegaphoneService {
                     }
                     opusUtils.destroyEncoder(createEncoder)  // 线程退出时释放编码器
                     aecm.release()  // ★ 释放 AECM
+                    recordAecm.release()
                     farendProvider.clear()
                     recordFarendProvider.clear()
                 }

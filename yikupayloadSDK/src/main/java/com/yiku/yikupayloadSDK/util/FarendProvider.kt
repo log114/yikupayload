@@ -63,5 +63,41 @@ class FarendProvider {
         return result
     }
 
+    /**
+     * 严格返回 6 帧（60 ms），对应近端当前块
+     * @param targetMs 第 0 帧的期望入队时间
+     */
+    fun pollExact6(targetMs: Long, windowMs: Long = 35): List<ShortArray> {
+        val slots = arrayOfNulls<ShortArray>(6)
+        val iter = queue.iterator()
+        val lower = targetMs - windowMs
+        val upper = targetMs + 60 + windowMs   // 覆盖 6 帧范围
+
+        while (iter.hasNext()) {
+            val f = iter.next()
+            if (f.enqueueTimeMs < lower - 80) {
+                // 太老，不可能再被任何槽用到
+                iter.remove()
+                continue
+            }
+            if (f.enqueueTimeMs > upper) {
+                // 太新，留给下几轮
+                break
+            }
+            // 算它该进哪个槽（四舍五入）
+            val offset = f.enqueueTimeMs - targetMs
+            val k = (offset / 10).toInt().coerceIn(0, 5)
+            // 边界：如果偏移负太多（比如 -30ms），归到槽 0；正超了归槽 5
+            if (slots[k] == null) {
+                slots[k] = f.pcm
+                iter.remove()   // ★ 用过就删，绝不二次喂
+            } else {
+                iter.remove()   // 同槽重复帧，扔
+            }
+        }
+        // 补静音 + 转 List
+        return slots.map { it ?: ShortArray(80) }
+    }
+
     fun clear() { queue.clear() }
 }
