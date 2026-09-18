@@ -8,7 +8,7 @@ class ProbeMixer16k {
         private const val SAMPLE_RATE = 16000
         private const val PROBE_INTERVAL_MS = 10000
         private const val PROBE_DURATION_MS = 40
-        private const val PROBE_DB_SCALE = -20
+        private const val PROBE_DB_SCALE = -35
 
         // ★ 最近一次 PN 开始播放的时间（毫秒）
         @Volatile var lastPnPlayTimeMs: Long = 0L

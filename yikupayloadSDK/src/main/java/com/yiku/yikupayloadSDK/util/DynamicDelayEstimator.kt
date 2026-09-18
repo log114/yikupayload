@@ -6,8 +6,8 @@ import kotlin.math.sqrt
 class DynamicDelayEstimator {
     companion object {
         private const val SAMPLE_RATE = 8000
-        private const val SEARCH_MIN_MS = 50
-        private const val SEARCH_MAX_MS = 250
+        private const val SEARCH_MIN_MS = 90
+        private const val SEARCH_MAX_MS = 200
         private const val WINDOW_MS = 300          // 保持 300ms 够了
         private const val PEAK_RATIO_THRESHOLD = 1.2  // 先放宽
         private const val SILENCE_THRESHOLD = 2_000_000L

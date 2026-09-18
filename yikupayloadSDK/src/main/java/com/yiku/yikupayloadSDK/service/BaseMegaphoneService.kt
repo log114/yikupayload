@@ -85,6 +85,7 @@ open class BaseMegaphoneService {
     var getAudioFilesCallback: GetAudioFilesCallback? = null
 
     private val farendProvider = FarendProvider()
+    private val recordFarendProvider = FarendProvider()
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)  // 连接超时：30秒
@@ -284,10 +285,11 @@ open class BaseMegaphoneService {
 
             // ★ 录音启动前清空参考帧队列（防止拿到旧帧）
             farendProvider.clear()
+            recordFarendProvider.clear()
             // ★ actualDelay 是标定值（~120ms），aecmDelay 固定 20ms
-            val aecmDelay = 20  // 传给 AECM msInSndCardBuf，必须 ≤ 32
+            val aecmDelay = 30  // 传给 AECM msInSndCardBuf，必须 ≤ 32
             var actualDelay = initialDelay
-            val audioSource = MediaRecorder.AudioSource.MIC //来源
+            val audioSource = MediaRecorder.AudioSource.UNPROCESSED //来源
             val rate = 8000 //采样频率
             val track = AudioFormat.CHANNEL_IN_MONO //声道
             val audioFormat = AudioFormat.ENCODING_PCM_16BIT //格式
@@ -327,6 +329,7 @@ open class BaseMegaphoneService {
 
                 // ★ 创建 AECM 处理器（录音线程内创建，线程内释放）
                 val aecm = AecmProcessor(rate, 4)
+                val recordAecm = AecmProcessor(rate, 4)
 
                 recordingThread = thread {
                     val createEncoder = opusUtils.createEncoder(rate, 1, 1)
@@ -337,7 +340,7 @@ open class BaseMegaphoneService {
                         // ===== ★ AEC 处理开始 =====
                         val nearShorts = Uilts.byteArrayToShortArray(data)  // 480 个 short
 
-                        val outShorts = ShortArray(480)
+                        val localShorts = ShortArray(480)
                         if(isOpenAECM) {
                             // 喂给延迟估计器
                             delayEstimator.feedNear(nearShorts)
@@ -374,16 +377,33 @@ open class BaseMegaphoneService {
                                 val nearFrame = nearShorts.copyOfRange(startIdx, endIdx)
 
                                 val aecFrame = aecm.process(nearFrame, aecmDelay)
-                                aecFrame.copyInto(outShorts, startIdx)
+                                aecFrame.copyInto(localShorts, startIdx)
                             }
                         }
                         else {
-                            nearShorts.copyInto(outShorts, 0)
+                            nearShorts.copyInto(localShorts, 0)
                         }
 
+                        val remoteShorts = ShortArray(480)
+                        val remoteAlignedFrames = recordFarendProvider.pollAlignedFrames(System.currentTimeMillis() - 300)
+                        // ★ 喂给 AECM（连续喂入）
+                        for (farFrame in remoteAlignedFrames) {
+                            recordAecm.bufferFarend(farFrame, 80)
+                        }
+                        // ★ 逐帧 process，传固定小值
+                        for (i in 0 until 6) {
+                            val startIdx = i * 80
+                            val endIdx = startIdx + 80
+                            val nearFrame = localShorts.copyOfRange(startIdx, endIdx)
+
+                            val aecFrame = recordAecm.process(nearFrame, aecmDelay)
+                            aecFrame.copyInto(remoteShorts, startIdx)
+                        }
+
+                        recordFarendProvider.onBeforeRecord(remoteShorts) // 录音内容参考帧
                         // ★ 对 AEC 处理后的 PCM 做 Opus 编码
                         val ret = ByteArray(bufferSize / 8)
-                        val rc = opusUtils.encode(createEncoder, outShorts, 0, ret)
+                        val rc = opusUtils.encode(createEncoder, remoteShorts, 0, ret)
 
                         var sendData = REAL_TIME_SHOUT.toByteArray()
                         if (AudioRecord.ERROR_INVALID_OPERATION != read) {
@@ -403,6 +423,8 @@ open class BaseMegaphoneService {
                     }
                     opusUtils.destroyEncoder(createEncoder)  // 线程退出时释放编码器
                     aecm.release()  // ★ 释放 AECM
+                    farendProvider.clear()
+                    recordFarendProvider.clear()
                 }
             } catch (e: IllegalStateException) {
                 // 标记需要重新初始化
