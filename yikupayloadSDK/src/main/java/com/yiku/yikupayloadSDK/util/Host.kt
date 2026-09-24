@@ -24,3 +24,4 @@ const val WaterGunEscapeHost = "192.168.144.40"// 40水枪脱离
 const val Thrower200Host = "192.168.144.41"// 200kg抛投器
 const val CargoBoxHost = "192.168.144.42"// 运输箱
 const val EMNetGunHost = "192.168.144.43"// 电磁网枪
+const val PaintSprayingHost = "192.168.144.44"// 油漆喷涂
