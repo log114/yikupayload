@@ -261,7 +261,7 @@ open class BaseMegaphoneService {
     }
 
     @RequiresPermission(value = "android.permission.RECORD_AUDIO")
-    open fun startRealTimeShout(isDisableRadio: Boolean) {
+    open fun startRealTimeShout(isDisableRadio: Boolean, service: BaseMegaphoneService? = null) {
         synchronized(audioLock) {
             // 检查是否已初始化并运行
             if (isRecording) {
@@ -319,6 +319,7 @@ open class BaseMegaphoneService {
                             try {
                                 sendData += ret
                                 sendData2Payload(sendData)
+                                service?.sendData2Payload(sendData)
                             } catch (e: IOException) {
                                 e.printStackTrace()
                             }
@@ -342,7 +343,7 @@ open class BaseMegaphoneService {
         }
     }
 
-    fun stopRealTimeShout() {
+    fun stopRealTimeShout(service: BaseMegaphoneService? = null) {
         synchronized(audioLock) {
             isRecording = false
 
@@ -351,6 +352,7 @@ open class BaseMegaphoneService {
             // 发送停止标识，关闭喊话器的功放
             val sendData = STOP_REAL_TIME_SHOUT.toByteArray()
             sendData2Payload(sendData)
+            service?.sendData2Payload(sendData)
         }
     }
 

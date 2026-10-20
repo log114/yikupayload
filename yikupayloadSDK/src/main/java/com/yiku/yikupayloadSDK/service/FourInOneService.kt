@@ -145,7 +145,7 @@ class FourInOneService : BaseMegaphoneService() {
                 Log.i(TAG, "四合一，sendData:${bytesToHex(data)}")
                 //向输出流中写入数据，传向服务端
                 if (client == null || !client!!.isConnected || !isConnected) {
-                    connect()
+                    return@thread
                 }
                 out?.write(data)
             } catch (e: java.lang.Exception) {
