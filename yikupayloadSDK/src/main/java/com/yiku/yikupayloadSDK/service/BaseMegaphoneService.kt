@@ -45,6 +45,8 @@ import kotlin.concurrent.thread
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import com.alibaba.fastjson.JSONObject
+import com.yiku.yikupayloadSDK.protocol.SET_AUDIO_LOOP_INTERVAL
+import com.yiku.yikupayloadSDK.protocol.SET_TTS_LOOP_INTERVAL
 import com.yiku.yikupayloadSDK.protocol.TTS_SPEECH_RATE
 import com.yiku.yikupayloadSDK.util.ProgressRequestBody
 import com.yiku.yikupayloadSDK.util.Uilts.normalizeExtensionToLowerCase
@@ -669,6 +671,20 @@ open class BaseMegaphoneService {
         }
         Log.i(TAG, "错误代号:${jsonResp.getIntValue("code")}")
         return false
+    }
+
+    // 设置tts循环播放时间间隔，interval单位：0.1秒
+    fun setTTSLoopInterval(interval: Int) {
+        var sendData = SET_TTS_LOOP_INTERVAL.toByteArray()
+        sendData += interval.toString().padStart(2, '0').toByteArray()
+        sendData2Payload(sendData)
+    }
+
+    // 设置音频播放循环播放时间间隔，interval单位：0.1秒
+    fun setAudioLoopInterval(interval: Int) {
+        var sendData = SET_AUDIO_LOOP_INTERVAL.toByteArray()
+        sendData += interval.toString().padStart(2, '0').toByteArray()
+        sendData2Payload(sendData)
     }
 
     // 四合一的灯光控制
