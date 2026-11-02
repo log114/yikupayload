@@ -6,15 +6,15 @@ import kotlin.math.sqrt
 class DynamicDelayEstimator {
     companion object {
         private const val SAMPLE_RATE = 8000
-        private const val SEARCH_MIN_MS = 50
-        private const val SEARCH_MAX_MS = 250
-        private const val WINDOW_MS = 300          // 保持 300ms 够了
+        private const val SEARCH_MIN_MS = 80
+        private const val SEARCH_MAX_MS = 500
+        private const val WINDOW_MS = 800          // 必须 > SEARCH_MAX_MS，建议 1.5~2 倍
         private const val PEAK_RATIO_THRESHOLD = 1.2  // 先放宽
         private const val SILENCE_THRESHOLD = 2_000_000L
 
         // ★ PN 回声到达窗口：播放后 50~250ms
-        private const val PN_ECHO_MIN_DELAY = 50L
-        private const val PN_ECHO_MAX_DELAY = 250L
+        private const val PN_ECHO_MIN_DELAY = 80L
+        private const val PN_ECHO_MAX_DELAY = 500L // 和 SEARCH_MAX_MS 对齐
 
         // ★ 检测频率：每 100ms 检查一次
         private const val CHECK_INTERVAL_MS = 100L
@@ -40,8 +40,7 @@ class DynamicDelayEstimator {
     private var currentPnCycleStartTime = 0L
 
     init {
-        val probeSeq16k = ProbeMixer16k.getProbeSequence()
-        probeTemplate8k = Uilts.downsample16kTo8k(probeSeq16k)
+        probeTemplate8k = ProbeMixer8k.getProbeSequence()
     }
 
     fun feedNear(nearFrame: ShortArray) {
@@ -69,7 +68,7 @@ class DynamicDelayEstimator {
         lastCheckTime = now
 
         // ★ 检查是否在 PN 回声窗口内
-        val pnPlayTime = ProbeMixer16k.lastPnPlayTimeMs
+        val pnPlayTime = ProbeMixer8k.lastPnSendTimeMs
         if (pnPlayTime == 0L) return null
 
         val elapsedSincePn = now - pnPlayTime
@@ -88,9 +87,8 @@ class DynamicDelayEstimator {
             if (currentPnCycleDetected) {
                 return null  // 已经检测过了
             }
-            // 如果 elapsed > 250ms 且还没检测过，说明这次可能漏了
             // 但仍然尝试检测（窗口里可能还有残余）
-            if (elapsedSincePn > PN_ECHO_MAX_DELAY + 100) {
+            if (elapsedSincePn > SEARCH_MAX_MS + 150) {
                 return null
             }
         }

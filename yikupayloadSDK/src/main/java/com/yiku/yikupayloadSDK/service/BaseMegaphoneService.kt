@@ -49,6 +49,7 @@ import com.yiku.yikupayloadSDK.protocol.TTS_SPEECH_RATE
 import com.yiku.yikupayloadSDK.util.AecmProcessor
 import com.yiku.yikupayloadSDK.util.DynamicDelayEstimator
 import com.yiku.yikupayloadSDK.util.FarendProvider
+import com.yiku.yikupayloadSDK.util.ProbeMixer8k
 import com.yiku.yikupayloadSDK.util.ProgressRequestBody
 import com.yiku.yikupayloadSDK.util.Uilts.normalizeExtensionToLowerCase
 import com.yiku.yikupayloadSDK.util.bytesToHex
@@ -265,13 +266,8 @@ open class BaseMegaphoneService {
         sendData2Payload(sendData)
     }
 
-    // 输入参考帧
-    open fun inputReferenceFrame(pcm16k: ShortArray) {
-        farendProvider.onBeforePlay(pcm16k)
-    }
-
     @RequiresPermission(value = "android.permission.RECORD_AUDIO")
-    open fun startRealTimeShout(isOpenAECM: Boolean = true, initialDelay: Int = 120) {
+    open fun startRealTimeShout(isOpenAECM: Boolean = true, initialDelay: Int = 300) {
         synchronized(audioLock) {
             // 检查是否已初始化并运行
             if (isRecording) {
@@ -329,6 +325,7 @@ open class BaseMegaphoneService {
                 val aecm = AecmProcessor(rate, 4)
 
                 recordingThread = thread {
+                    val pnMixer8k = ProbeMixer8k()
                     val createEncoder = opusUtils.createEncoder(rate, 1, 1)
                     while (isRecording && !Thread.interrupted()) {
                         val read = mAudioRecord!!.read(data, 0, bufferSize)
@@ -381,18 +378,17 @@ open class BaseMegaphoneService {
                             nearShorts.copyInto(outShorts, 0)
                         }
 
+                        // 对AECM处理后的数据，混 PN（只用于延迟估计）
+                        pnMixer8k.mix(outShorts)
+                        // 作为“参考帧”缓存，时间戳 = 发送时间
+                        farendProvider.onBeforeSend(outShorts)
+
                         // ★ 对 AEC 处理后的 PCM 做 Opus 编码
                         val ret = ByteArray(bufferSize / 8)
                         val rc = opusUtils.encode(createEncoder, outShorts, 0, ret)
-
-                        var sendData = REAL_TIME_SHOUT.toByteArray()
-                        if (AudioRecord.ERROR_INVALID_OPERATION != read) {
-                            try {
-                                sendData += ret
-                                sendData2Payload(sendData)
-                            } catch (e: IOException) {
-                                e.printStackTrace()
-                            }
+                        if (rc > 0) {
+                            val sendData = REAL_TIME_SHOUT.toByteArray() + ret
+                            sendData2Payload(sendData)
                         }
                         try {
                             Thread.sleep(10) // 添加异常捕获
