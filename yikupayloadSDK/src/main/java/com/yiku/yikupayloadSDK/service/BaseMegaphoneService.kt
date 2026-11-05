@@ -301,6 +301,9 @@ open class BaseMegaphoneService {
             }
 
             val data = ByteArray(bufferSize)
+            var prevSample = 0f                    // 一阶低通延迟线
+            val alpha = 0.12f                      // 高频衰减强度（0.05~0.3 之间调）
+            val tapeGain = 0.80f
 
             try {
                 isRecording = true
@@ -312,18 +315,31 @@ open class BaseMegaphoneService {
                     val createEncoder = opusUtils.createEncoder(rate, 1, 1)
                     while (isRecording && !Thread.interrupted()) {
                         val read = mAudioRecord!!.read(data, 0, bufferSize)
-                        val ret = ByteArray(bufferSize / 8)
-                        val rc = opusUtils.encode(
-                            createEncoder, Uilts.byteArrayToShortArray(data), 0, ret
-                        )
-                        var sendData = REAL_TIME_SHOUT.toByteArray()
-                        if (AudioRecord.ERROR_INVALID_OPERATION != read) {
+                        if (AudioRecord.ERROR_INVALID_OPERATION != read && read > 0) {
+                            val shortData = Uilts.byteArrayToShortArray(data)
+
+                            // ========== 增益 + 高频额外衰减 ==========
+                            for (i in shortData.indices) {
+                                // 1. 转浮点
+                                val x = shortData[i] / 32768f
+
+                                // 2. 一阶低通：高频衰减（模拟胶带对高频的吸收）
+                                prevSample = prevSample + alpha * (x - prevSample)
+
+                                // 3. 整体增益（模拟缠胶带降低灵敏度）
+                                val out = (prevSample * tapeGain * 32768f).toInt()
+
+                                shortData[i] = out.coerceIn(-32768, 32767).toShort()
+                            }
+                            // =========================================
+
+                            val ret = ByteArray(bufferSize / 8)
+                            opusUtils.encode(createEncoder, shortData, 0, ret)
+                            var sendData = REAL_TIME_SHOUT.toByteArray()
                             try {
                                 sendData += ret
                                 sendData2Payload(sendData)
-                            } catch (e: IOException) {
-                                e.printStackTrace()
-                            }
+                            } catch (e: IOException) { e.printStackTrace() }
                         }
                         try {
                             Thread.sleep(10) // 添加异常捕获
