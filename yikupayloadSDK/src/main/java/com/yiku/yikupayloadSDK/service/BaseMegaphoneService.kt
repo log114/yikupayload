@@ -48,6 +48,7 @@ import com.alibaba.fastjson.JSONObject
 import com.yiku.yikupayloadSDK.protocol.SET_AUDIO_LOOP_INTERVAL
 import com.yiku.yikupayloadSDK.protocol.SET_TTS_LOOP_INTERVAL
 import com.yiku.yikupayloadSDK.protocol.TTS_SPEECH_RATE
+import com.yiku.yikupayloadSDK.util.FrequencyShifter
 import com.yiku.yikupayloadSDK.util.ProgressRequestBody
 import com.yiku.yikupayloadSDK.util.Uilts.normalizeExtensionToLowerCase
 import com.yiku.yikupayloadSDK.util.bytesToHex
@@ -301,9 +302,7 @@ open class BaseMegaphoneService {
             }
 
             val data = ByteArray(bufferSize)
-            var prevSample = 0f                    // 一阶低通延迟线
-            val alpha = 0.12f                      // 高频衰减强度（0.05~0.3 之间调）
-            val tapeGain = 0.80f
+            val shifter = FrequencyShifter(sampleRate = 8000, shiftHz = 5f)  // 5Hz 移频
 
             try {
                 isRecording = true
@@ -318,20 +317,9 @@ open class BaseMegaphoneService {
                         if (AudioRecord.ERROR_INVALID_OPERATION != read && read > 0) {
                             val shortData = Uilts.byteArrayToShortArray(data)
 
-                            // ========== 增益 + 高频额外衰减 ==========
-                            for (i in shortData.indices) {
-                                // 1. 转浮点
-                                val x = shortData[i] / 32768f
-
-                                // 2. 一阶低通：高频衰减（模拟胶带对高频的吸收）
-                                prevSample = prevSample + alpha * (x - prevSample)
-
-                                // 3. 整体增益（模拟缠胶带降低灵敏度）
-                                val out = (prevSample * tapeGain * 32768f).toInt()
-
-                                shortData[i] = out.coerceIn(-32768, 32767).toShort()
-                            }
-                            // =========================================
+                            // ======= 5Hz 移频（破坏啸叫相位条件）=======
+                            shifter.process(shortData)
+                            // ================================================
 
                             val ret = ByteArray(bufferSize / 8)
                             opusUtils.encode(createEncoder, shortData, 0, ret)
@@ -349,6 +337,7 @@ open class BaseMegaphoneService {
                         }
                     }
                     opusUtils.destroyEncoder(createEncoder)  // 线程退出时释放编码器
+                    shifter.reset()  // 线程退出时重置移频器状态
                 }
             } catch (e: IllegalStateException) {
                 // 标记需要重新初始化
